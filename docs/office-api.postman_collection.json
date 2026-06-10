@@ -1,0 +1,138 @@
+{
+  "info": {
+    "name": "Codex - Office API",
+    "description": "Office resource CRUD. Set {{baseUrl}} and {{token}} collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "token", "value": "PASTE_JWT_HERE" },
+    { "key": "officeId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "List offices",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offices?page=1&limit=10&search=&sort=created_at&order=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" },
+            { "key": "search", "value": "" },
+            { "key": "sort", "value": "created_at" },
+            { "key": "order", "value": "desc" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get office by id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offices/{{officeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices", "{{officeId}}"]
+        }
+      }
+    },
+    {
+      "name": "Create office",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  pm.collectionVariables.set('officeId', pm.response.json().data.id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"office_name\": \"Downtown Office\",\n  \"office_email\": \"office@example.com\",\n  \"office_mobile_no\": \"+61400000000\",\n  \"membership_level\": \"gold\",\n  \"membership_type\": \"monthly\",\n  \"licence_no\": \"LIC-12345\",\n  \"approved\": false,\n  \"office_status\": \"active\",\n  \"office_address\": \"123 Main St, Sydney NSW\",\n  \"biography\": \"Long biography text...\",\n  \"office_logo\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/offices",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices"]
+        }
+      }
+    },
+    {
+      "name": "Full update (PUT)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"office_name\": \"Downtown Office HQ\",\n  \"office_email\": \"office@example.com\",\n  \"office_mobile_no\": \"+61400000111\",\n  \"membership_level\": \"premium\",\n  \"membership_type\": \"yearly\",\n  \"office_status\": \"active\",\n  \"office_address\": \"123 Main St, Sydney NSW\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/offices/{{officeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices", "{{officeId}}"]
+        }
+      }
+    },
+    {
+      "name": "Partial update (PATCH)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"approved\": true,\n  \"office_status\": \"inactive\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/offices/{{officeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices", "{{officeId}}"]
+        }
+      }
+    },
+    {
+      "name": "Delete office",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/offices/{{officeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices", "{{officeId}}"]
+        }
+      }
+    },
+    {
+      "name": "Bulk delete",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ids\": [\"665f1c2a9b1e4a0012ab34cd\", \"665f1c2a9b1e4a0012ab34ce\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/offices",
+          "host": ["{{baseUrl}}"],
+          "path": ["offices"]
+        }
+      }
+    }
+  ]
+}
