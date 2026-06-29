@@ -1,0 +1,153 @@
+{
+  "info": {
+    "name": "Codex - Staff & Roles API",
+    "description": "Staff CRUD + roles dropdown. Set {{baseUrl}} and {{token}} collection variables (get the token from the Auth collection's Login). Create staff auto-saves {{staffId}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "token", "value": "PASTE_JWT_HERE" },
+    { "key": "staffId", "value": "" },
+    { "key": "officeId", "value": "PASTE_EXISTING_OFFICE_ID" },
+    { "key": "roleId", "value": "2" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "List staff",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/staff?page=1&limit=10&search=&role_id=&sort=created_at&order=desc",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" },
+            { "key": "search", "value": "" },
+            { "key": "role_id", "value": "", "disabled": true },
+            { "key": "sort", "value": "created_at" },
+            { "key": "order", "value": "desc" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get staff by id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/staff/{{staffId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff", "{{staffId}}"]
+        }
+      }
+    },
+    {
+      "name": "Create staff",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  pm.collectionVariables.set('staffId', pm.response.json().data.id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Ali\",\n  \"last_name\": \"Khan\",\n  \"email\": \"ali@example.com\",\n  \"password\": \"StrongPass@123\",\n  \"mobile_no\": \"03001234567\",\n  \"cnic_no\": \"35202-1234567-1\",\n  \"office_id\": \"{{officeId}}\",\n  \"role_id\": {{roleId}},\n  \"address\": \"Lahore\",\n  \"biography\": \"Senior agent, 5 years experience\",\n  \"profile_photo\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"staff_status\": \"active\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/staff",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff"]
+        }
+      }
+    },
+    {
+      "name": "Full update (PUT)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Ali\",\n  \"last_name\": \"Khan Updated\",\n  \"email\": \"ali@example.com\",\n  \"password\": \"\",\n  \"mobile_no\": \"03001112233\",\n  \"cnic_no\": \"35202-1234567-1\",\n  \"office_id\": \"{{officeId}}\",\n  \"role_id\": {{roleId}},\n  \"address\": \"Lahore, DHA\",\n  \"biography\": \"Updated bio\",\n  \"profile_photo\": null,\n  \"staff_status\": \"active\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/staff/{{staffId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff", "{{staffId}}"]
+        }
+      }
+    },
+    {
+      "name": "Partial update (PATCH) - toggle status",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"staff_status\": \"inactive\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/staff/{{staffId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff", "{{staffId}}"]
+        }
+      }
+    },
+    {
+      "name": "Delete staff",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/staff/{{staffId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff", "{{staffId}}"]
+        }
+      }
+    },
+    {
+      "name": "Bulk delete",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ids\": [\"665f1c2a9b1e4a0012ab34cd\", \"665f1c2a9b1e4a0012ab34ce\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/staff",
+          "host": ["{{baseUrl}}"],
+          "path": ["staff"]
+        }
+      }
+    },
+    {
+      "name": "List roles (dropdown)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/roles",
+          "host": ["{{baseUrl}}"],
+          "path": ["roles"]
+        }
+      }
+    }
+  ]
+}
