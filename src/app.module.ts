@@ -12,6 +12,9 @@ import { DataBaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { OfficeModule } from './modules/office/office.module';
+import { ProfileModule } from './modules/profile/profile.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { StaffModule } from './modules/staff/staff.module';
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import { OfficeModule } from './modules/office/office.module';
     DataBaseModule,
     AuthModule,
     OfficeModule,
+    ProfileModule,
+    RolesModule,
+    StaffModule,
   ],
   providers: [
     // JWT guard runs on every route; opt out with @Public()

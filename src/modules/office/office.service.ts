@@ -7,6 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model } from 'mongoose';
 import { StorageService } from '../../common/storage/storage.service';
+import { RolesService } from '../roles/roles.service';
 import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreateOfficeDto } from './dto/create-office.dto';
 import { QueryOfficeDto, SortOrder } from './dto/query-office.dto';
@@ -23,6 +24,7 @@ export class OfficeService {
     @InjectModel(Office.name)
     private readonly officeModel: Model<OfficeDocument>,
     private readonly fileStorage: StorageService,
+    private readonly rolesService: RolesService,
   ) {}
 
   async create(dto: CreateOfficeDto): Promise<OfficeDocument> {
@@ -33,14 +35,19 @@ export class OfficeService {
       payload.office_logo = this.fileStorage.saveBase64Image(dto.office_logo);
     }
 
+    let office: OfficeDocument;
     try {
-      return await this.officeModel.create(payload);
+      office = await this.officeModel.create(payload);
     } catch (e) {
       if (isDuplicateKeyError(e)) {
         throw new ConflictException('office_email already exists');
       }
       throw e;
     }
+
+    // every office starts with its own default roles (Admin)
+    await this.rolesService.createDefaultsForOffice(office._id);
+    return office;
   }
 
   async findAll(query: QueryOfficeDto): Promise<{

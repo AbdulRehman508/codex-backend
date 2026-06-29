@@ -13,14 +13,21 @@ const ALLOWED_MIME: Record<string, string> = {
 };
 
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
-const UPLOAD_DIR = join(process.cwd(), 'uploads', 'offices');
+const UPLOAD_ROOT = join(process.cwd(), 'uploads');
 const DATA_URL_RE = /^data:(?<mime>[a-z]+\/[a-z0-9.+-]+);base64,(?<data>.+)$/i;
+
+export interface SaveImageOptions {
+  // sub-folder under /uploads (and the public URL path segment)
+  folder?: string;
+  // field name used in the validation error map
+  field?: string;
+}
 
 @Injectable()
 export class StorageService {
   constructor(private readonly config: ConfigService) {
-    if (!existsSync(UPLOAD_DIR)) {
-      mkdirSync(UPLOAD_DIR, { recursive: true });
+    if (!existsSync(UPLOAD_ROOT)) {
+      mkdirSync(UPLOAD_ROOT, { recursive: true });
     }
   }
 
@@ -29,13 +36,16 @@ export class StorageService {
    * @returns public URL of the stored file
    * @throws BadRequestException on bad mime / oversize / malformed input
    */
-  saveBase64Image(dataUrl: string): string {
+  saveBase64Image(dataUrl: string, opts: SaveImageOptions = {}): string {
+    const folder = opts.folder ?? 'offices';
+    const field = opts.field ?? 'office_logo';
+
     const match = DATA_URL_RE.exec(dataUrl.trim());
     if (!match?.groups) {
       throw new BadRequestException({
         message: 'Validation failed',
         errors: {
-          office_logo: ['must be a valid base64 image data URL'],
+          [field]: ['must be a valid base64 image data URL'],
         },
       });
     }
@@ -46,7 +56,7 @@ export class StorageService {
       throw new BadRequestException({
         message: 'Validation failed',
         errors: {
-          office_logo: [
+          [field]: [
             `unsupported image type "${mime}" (allowed: ${Object.keys(ALLOWED_MIME).join(', ')})`,
           ],
         },
@@ -59,14 +69,14 @@ export class StorageService {
     } catch {
       throw new BadRequestException({
         message: 'Validation failed',
-        errors: { office_logo: ['invalid base64 payload'] },
+        errors: { [field]: ['invalid base64 payload'] },
       });
     }
 
     if (buffer.length === 0) {
       throw new BadRequestException({
         message: 'Validation failed',
-        errors: { office_logo: ['empty image payload'] },
+        errors: { [field]: ['empty image payload'] },
       });
     }
 
@@ -74,23 +84,28 @@ export class StorageService {
       throw new BadRequestException({
         message: 'Validation failed',
         errors: {
-          office_logo: [
+          [field]: [
             `image exceeds max size of ${MAX_BYTES / (1024 * 1024)} MB`,
           ],
         },
       });
     }
 
-    const fileName = `${randomUUID()}.${ext}`;
-    writeFileSync(join(UPLOAD_DIR, fileName), buffer);
+    const dir = join(UPLOAD_ROOT, folder);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
 
-    return this.publicUrl(fileName);
+    const fileName = `${randomUUID()}.${ext}`;
+    writeFileSync(join(dir, fileName), buffer);
+
+    return this.publicUrl(folder, fileName);
   }
 
-  private publicUrl(fileName: string): string {
+  private publicUrl(folder: string, fileName: string): string {
     const base = (
       this.config.get<string>('appUrl') ?? 'http://localhost:3000'
     ).replace(/\/$/, '');
-    return `${base}/uploads/offices/${fileName}`;
+    return `${base}/uploads/${folder}/${fileName}`;
   }
 }

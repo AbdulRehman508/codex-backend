@@ -12,6 +12,13 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '5mb' });
   app.setGlobalPrefix('api');
 
+  app.enableCors({
+    origin: config.get<string>('corsOrigin')?.split(',') ?? true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
+
   // global guard / interceptor / filter / pipe are registered in AppModule
 
   const swaggerConfig = new DocumentBuilder()
