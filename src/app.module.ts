@@ -9,6 +9,7 @@ import { buildValidationPipe } from './common/pipes/validation.pipe';
 import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { DataBaseModule } from './database/database.module';
+import { AccessModule } from './modules/access/access.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { OfficeModule } from './modules/office/office.module';
@@ -29,6 +30,7 @@ import { StaffModule } from './modules/staff/staff.module';
     }),
     DataBaseModule,
     AuthModule,
+    AccessModule,
     OfficeModule,
     ProfileModule,
     RolesModule,

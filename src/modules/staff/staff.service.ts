@@ -72,7 +72,7 @@ export class StaffService {
     page: number;
     limit: number;
   }> {
-    const { page, limit, search, role_id, sort, order } = query;
+    const { page, limit, search, role_id, office_id, sort, order } = query;
 
     const filter: Record<string, any> = { deleted_at: null };
     if (search?.trim()) {
@@ -86,6 +86,10 @@ export class StaffService {
     }
     if (role_id !== undefined) {
       filter.role_id = role_id;
+    }
+    // staff belong to many offices; match those linked to this office
+    if (office_id) {
+      filter.office_ids = office_id;
     }
 
     const sortSpec: Record<string, 1 | -1> = {

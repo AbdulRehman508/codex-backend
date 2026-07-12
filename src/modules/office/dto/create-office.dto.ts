@@ -8,8 +8,8 @@ import {
   IsString,
 } from 'class-validator';
 import {
-  MembershipLevel,
-  MembershipType,
+  // MembershipLevel,
+  // MembershipType,
   OfficeStatus,
 } from '../schemas/office.schema';
 
@@ -29,13 +29,13 @@ export class CreateOfficeDto {
   @IsNotEmpty()
   office_mobile_no!: string;
 
-  @ApiProperty({ enum: MembershipLevel, example: MembershipLevel.GOLD })
-  @IsEnum(MembershipLevel)
-  membership_level!: MembershipLevel;
+  // @ApiProperty({ enum: MembershipLevel, example: MembershipLevel.GOLD })
+  // @IsEnum(MembershipLevel)
+  // membership_level!: MembershipLevel;
 
-  @ApiProperty({ enum: MembershipType, example: MembershipType.MONTHLY })
-  @IsEnum(MembershipType)
-  membership_type!: MembershipType;
+  // @ApiProperty({ enum: MembershipType, example: MembershipType.MONTHLY })
+  // @IsEnum(MembershipType)
+  // membership_type!: MembershipType;
 
   @ApiPropertyOptional({ example: 'LIC-12345' })
   @IsOptional()

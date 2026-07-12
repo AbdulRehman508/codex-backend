@@ -14,16 +14,9 @@ export enum SortOrder {
   DESC = 'desc',
 }
 
-const SORTABLE = [
-  'first_name',
-  'email',
-  'mobile_no',
-  'staff_status',
-  'created_at',
-  'updated_at',
-];
+const SORTABLE = ['role', 'id'];
 
-export class QueryStaffDto {
+export class QueryRoleDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value as string, 10))
@@ -38,34 +31,26 @@ export class QueryStaffDto {
   @Min(1)
   limit: number = 10;
 
-  @ApiPropertyOptional({
-    description: 'Matches first_name, last_name, email, mobile_no',
-  })
+  @ApiPropertyOptional({ description: 'Matches role name / description' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by role_id' })
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value as string, 10))
-  @IsInt()
-  role_id?: number;
-
-  @ApiPropertyOptional({ description: 'Filter by office id (staff in office)' })
+  @ApiPropertyOptional({ description: 'Filter by office id' })
   @IsOptional()
   @IsMongoId()
   office_id?: string;
 
   @ApiPropertyOptional({
     description: `Sort field. One of: ${SORTABLE.join(', ')}`,
-    default: 'created_at',
+    default: 'id',
   })
   @IsOptional()
   @IsString()
   @IsEnum(SORTABLE.reduce((a, k) => ({ ...a, [k]: k }), {}), {
     message: `sort must be one of: ${SORTABLE.join(', ')}`,
   })
-  sort: string = 'created_at';
+  sort: string = 'id';
 
   @ApiPropertyOptional({ enum: SortOrder, default: SortOrder.DESC })
   @IsOptional()
