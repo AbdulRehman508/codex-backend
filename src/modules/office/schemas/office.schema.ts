@@ -48,11 +48,11 @@ export class Office {
   @Prop({ required: true, trim: true })
   office_mobile_no!: string;
 
-  @Prop({ required: true, enum: MembershipLevel })
-  membership_level!: MembershipLevel;
+  // @Prop({ required: true, enum: MembershipLevel })
+  // membership_level!: MembershipLevel;
 
-  @Prop({ required: true, enum: MembershipType })
-  membership_type!: MembershipType;
+  // @Prop({ required: true, enum: MembershipType })
+  // membership_type!: MembershipType;
 
   @Prop({ trim: true })
   licence_no?: string;

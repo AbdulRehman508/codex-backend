@@ -29,6 +29,9 @@ export class Role {
   @Prop({ required: true, trim: true })
   role!: string;
 
+  @Prop({ trim: true })
+  description?: string;
+
   // roles are scoped to an office now
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Office', required: true })
   office_id!: Types.ObjectId;
