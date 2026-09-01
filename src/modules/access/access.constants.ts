@@ -19,6 +19,7 @@ export const ACCESS_MODULES: ReadonlyArray<AccessModule> = [
   { key: 'sales', label: 'Sales' },
   { key: 'stock', label: 'Stock' },
   { key: 'products', label: 'Products' },
+  { key: 'location', label: 'Location' },
   { key: 'reports', label: 'Reports' },
 
   // User Management children

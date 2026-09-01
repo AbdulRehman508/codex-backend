@@ -12,7 +12,9 @@ import { DataBaseModule } from './database/database.module';
 import { AccessModule } from './modules/access/access.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { LocationsModule } from './modules/locations/locations.module';
 import { OfficeModule } from './modules/office/office.module';
+import { ProductsModule } from './modules/products/products.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { StaffModule } from './modules/staff/staff.module';
@@ -31,7 +33,9 @@ import { StaffModule } from './modules/staff/staff.module';
     DataBaseModule,
     AuthModule,
     AccessModule,
+    LocationsModule,
     OfficeModule,
+    ProductsModule,
     ProfileModule,
     RolesModule,
     StaffModule,

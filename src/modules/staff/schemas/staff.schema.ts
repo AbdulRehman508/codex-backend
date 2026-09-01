@@ -60,6 +60,14 @@ export class Staff {
   @Prop({ type: Number, ref: 'Role', required: true })
   role_id!: number;
 
+  // office last picked in the header; re-selected automatically on next login
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Office',
+    default: null,
+  })
+  last_office_id?: Types.ObjectId | null;
+
   @Prop({ required: true, trim: true })
   address!: string;
 
