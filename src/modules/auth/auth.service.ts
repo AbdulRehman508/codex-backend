@@ -33,6 +33,8 @@ export interface AuthUser {
   role_id: number;
   role: string | null;
   office_ids: string[];
+  /** office the user last worked in — the client re-selects it on login */
+  last_office_id: string | null;
   profile_photo: string | null;
   staff_status: string;
 }
@@ -178,6 +180,9 @@ export class AuthService {
       role_id: staff.role_id,
       role: role?.role ?? null,
       office_ids: staff.office_ids.map((o) => o.toString()),
+      last_office_id: staff.last_office_id
+        ? staff.last_office_id.toString()
+        : null,
       profile_photo: staff.profile_photo ?? null,
       staff_status: staff.staff_status,
     };

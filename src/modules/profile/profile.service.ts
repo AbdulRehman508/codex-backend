@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { StorageService } from '../../common/storage/storage.service';
 import { Office, OfficeDocument } from '../office/schemas/office.schema';
 import { Role, RoleDocument } from '../roles/schemas/role.schema';
@@ -20,6 +22,8 @@ export interface ProfileResponse {
   cnic_no: string;
   office_ids: string[];
   offices: string[];
+  /** office the user last picked in the header */
+  last_office_id: string | null;
   role_id: number;
   role: string | null;
   address: string;
@@ -77,6 +81,45 @@ export class ProfileService {
     return this.build(staff);
   }
 
+  /**
+   * Remember the office picked in the header. Admins may pick any live
+   * office; everyone else only one they are assigned to. `null` forgets it.
+   */
+  async setLastOffice(
+    userId: string,
+    officeId: string | null | undefined,
+  ): Promise<{ last_office_id: string | null }> {
+    const staff = await this.findLive(userId);
+
+    if (!officeId) {
+      staff.last_office_id = null;
+      await staff.save();
+      return { last_office_id: null };
+    }
+
+    const exists = await this.officeModel.exists({
+      _id: officeId,
+      deleted_at: null,
+    });
+    if (!exists) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { office_id: ['office does not exist'] },
+      });
+    }
+
+    const role = await this.roleModel.findById(staff.role_id).exec();
+    const isAdmin = role?.role?.trim().toLowerCase() === 'admin';
+    const assigned = staff.office_ids.some((o) => o.toString() === officeId);
+    if (!isAdmin && !assigned) {
+      throw new ForbiddenException('You are not assigned to that office');
+    }
+
+    staff.last_office_id = new Types.ObjectId(officeId);
+    await staff.save();
+    return { last_office_id: officeId };
+  }
+
   // --- helpers ---
 
   private async findLive(userId: string): Promise<StaffDocument> {
@@ -104,6 +147,9 @@ export class ProfileService {
       cnic_no: staff.cnic_no,
       office_ids: staff.office_ids.map((o) => o.toString()),
       offices: offices.map((o) => o.office_name),
+      last_office_id: staff.last_office_id
+        ? staff.last_office_id.toString()
+        : null,
       role_id: staff.role_id,
       role: role?.role ?? null,
       address: staff.address,
