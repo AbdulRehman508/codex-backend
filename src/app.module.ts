@@ -17,6 +17,7 @@ import { OfficeModule } from './modules/office/office.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { RolesModule } from './modules/roles/roles.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { StaffModule } from './modules/staff/staff.module';
 
 @Module({
@@ -38,6 +39,7 @@ import { StaffModule } from './modules/staff/staff.module';
     ProductsModule,
     ProfileModule,
     RolesModule,
+    SalesModule,
     StaffModule,
   ],
   providers: [
