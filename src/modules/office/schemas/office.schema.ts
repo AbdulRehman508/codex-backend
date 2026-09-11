@@ -60,6 +60,11 @@ export class Office {
   @Prop({ default: false })
   approved!: boolean;
 
+  // the head office. Only one office carries this flag, and only admins are
+  // offered it when assigning staff.
+  @Prop({ default: false })
+  is_main!: boolean;
+
   @Prop({ required: true, enum: OfficeStatus, default: OfficeStatus.ACTIVE })
   office_status!: OfficeStatus;
 

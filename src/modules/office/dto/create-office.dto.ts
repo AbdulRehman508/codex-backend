@@ -47,6 +47,14 @@ export class CreateOfficeDto {
   @IsBoolean()
   approved?: boolean;
 
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Head office. Setting it clears the flag on every other office',
+  })
+  @IsOptional()
+  @IsBoolean()
+  is_main?: boolean;
+
   @ApiPropertyOptional({ enum: OfficeStatus, default: OfficeStatus.ACTIVE })
   @IsOptional()
   @IsEnum(OfficeStatus)
