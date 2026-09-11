@@ -16,7 +16,7 @@ import { Office, OfficeDocument } from './schemas/office.schema';
 
 // fields returned on the list endpoint (multi-select grid)
 const LIST_FIELDS =
-  'id office_name office_status office_mobile_no office_email';
+  'id office_name office_status office_mobile_no office_email is_main';
 
 @Injectable()
 export class OfficeService {
@@ -43,6 +43,11 @@ export class OfficeService {
         throw new ConflictException('office_email already exists');
       }
       throw e;
+    }
+
+    // only one head office at a time
+    if (office.is_main) {
+      await this.demoteOtherMainOffices(office._id.toString());
     }
 
     // every office starts with its own default roles (Admin)
@@ -157,13 +162,28 @@ export class OfficeService {
     }
 
     try {
-      return await doc.save();
+      const saved = await doc.save();
+      // only one head office at a time
+      if (saved.is_main) {
+        await this.demoteOtherMainOffices(id);
+      }
+      return saved;
     } catch (e) {
       if (isDuplicateKeyError(e)) {
         throw new ConflictException('office_email already exists');
       }
       throw e;
     }
+  }
+
+  /** Clear `is_main` everywhere except the office that just claimed it. */
+  private async demoteOtherMainOffices(exceptId: string) {
+    await this.officeModel
+      .updateMany(
+        { _id: { $ne: exceptId }, is_main: true },
+        { is_main: false },
+      )
+      .exec();
   }
 
   private async assertEmailUnique(email: string, excludeId?: string) {

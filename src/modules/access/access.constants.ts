@@ -17,9 +17,11 @@ export interface AccessModule {
 export const ACCESS_MODULES: ReadonlyArray<AccessModule> = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'sales', label: 'Sales' },
-  { key: 'stock', label: 'Stock' },
+  // parked with their side-nav entries until the modules are finished.
+  // Re-adding a key restores it for every role at no access.
+  // { key: 'stock', label: 'Stock' },
   { key: 'products', label: 'Products' },
-  { key: 'location', label: 'Location' },
+  // { key: 'location', label: 'Location' },
   { key: 'reports', label: 'Reports' },
 
   // User Management children
