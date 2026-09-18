@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CountersModule } from '../../common/counters/counters.module';
+import { CustomersModule } from '../customers/customers.module';
 import { Office, OfficeSchema } from '../office/schemas/office.schema';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
 import { Sale, SaleSchema } from './schemas/sale.schema';
@@ -17,6 +18,8 @@ import { SalesService } from './sales.service';
     ]),
     // invoice numbers come from the shared counter collection
     CountersModule,
+    // borrowed sales create / bill the office's customers
+    CustomersModule,
   ],
   controllers: [SalesController],
   providers: [SalesService],
