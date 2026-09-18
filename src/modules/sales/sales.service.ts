@@ -6,6 +6,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { CountersService } from '../../common/counters/counters.service';
+import { CustomersService } from '../customers/customers.service';
+import { CustomerDocument } from '../customers/schemas/customer.schema';
 import { Office, OfficeDocument } from '../office/schemas/office.schema';
 import {
   Product,
@@ -17,6 +19,7 @@ import { CreateSaleDto, SaleLineDto } from './dto/create-sale.dto';
 import { QuerySaleDto, SortOrder } from './dto/query-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import {
+  PaymentMethod,
   Sale,
   SaleDocument,
   SaleLine,
@@ -26,7 +29,7 @@ import {
 
 // columns loaded for the list grid
 const LIST_FIELDS =
-  'invoice_no customer_name items_count payment_method total status created_at';
+  'invoice_no customer_name items_count payment_method total paid_amount borrow_amount is_borrow status created_at';
 
 export interface SaleListRow {
   id: string;
@@ -35,14 +38,25 @@ export interface SaleListRow {
   items_count: number;
   payment_method: string;
   total: number;
+  paid_amount: number;
+  borrow_amount: number;
+  is_borrow: boolean;
   status: string;
   created_at: string | null;
 }
 
 export interface SaleStats {
+  /** takings for the filtered range (today when no date filter is given) */
   today_total: number;
   transactions: number;
   average_order: number;
+  /** still owed across the filtered sales */
+  borrow_total: number;
+  paid_total: number;
+  cash_total: number;
+  online_total: number;
+  /** true when the numbers cover today only */
+  is_today: boolean;
 }
 
 @Injectable()
@@ -55,6 +69,7 @@ export class SalesService {
     @InjectModel(Office.name)
     private readonly officeModel: Model<OfficeDocument>,
     private readonly counters: CountersService,
+    private readonly customers: CustomersService,
   ) {}
 
   // ---------- create ----------
@@ -75,25 +90,44 @@ export class SalesService {
     }
 
     const status = dto.status ?? SaleStatus.COMPLETED;
+    const total = round2(subtotal - discount);
+    const { paid_amount, borrow_amount } = this.splitPayment(dto, total);
+    // a borrowed sale needs someone to owe the money
+    const customer = await this.resolveCustomer(dto, borrow_amount);
+
     // take the stock before writing the sale, so an oversell fails cleanly
     if (this.holdsStock(status)) {
       await this.applyStock(this.stockNeed(lines), 'take');
     }
 
     try {
-      return await this.saleModel.create({
+      const sale = await this.saleModel.create({
         office_id: new Types.ObjectId(dto.office_id),
         invoice_no: await this.nextInvoiceNo(dto.office_id),
-        customer_name: dto.customer_name?.trim() || 'Walk-in',
+        customer_id: customer?._id ?? null,
+        customer_name:
+          customer
+            ? `${customer.first_name} ${customer.last_name}`.trim()
+            : dto.customer_name?.trim() || 'Walk-in',
+        customer_mobile: customer?.mobile_no ?? dto.customer_mobile ?? null,
+        is_borrow: !!dto.is_borrow,
         payment_method: dto.payment_method,
         lines,
         items_count,
         subtotal,
         discount,
-        total: round2(subtotal - discount),
+        total,
+        paid_amount,
+        borrow_amount,
         status,
         sold_by: this.toObjectIdOrNull(userId),
       });
+
+      // put the unpaid part on the customer's running balance
+      if (customer && borrow_amount > 0 && this.holdsStock(status)) {
+        await this.customers.adjustBorrow(customer._id, borrow_amount);
+      }
+      return sale;
     } catch (e) {
       // put the stock back if the write failed
       if (this.holdsStock(status)) {
@@ -198,29 +232,81 @@ export class SalesService {
     };
   }
 
-  /** Chips above the grid: today's takings, transaction count, average order. */
-  async stats(officeId?: string): Promise<SaleStats> {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+  /**
+   * Chips above the grid. They follow whatever filters the grid has applied;
+   * with no date filter they fall back to today, which is what the default
+   * "Today's Sales" chip means.
+   */
+  async stats(query: QuerySaleDto): Promise<SaleStats> {
+    const { office_id, search, status, payment_method, date_from, date_to } =
+      query;
 
-    const match: Record<string, any> = {
-      deleted_at: null,
-      status: { $ne: SaleStatus.REFUNDED },
-      created_at: { $gte: start },
-    };
-    if (officeId) {
-      this.assertObjectId(officeId, 'office_id');
-      match.office_id = new Types.ObjectId(officeId);
+    const match: Record<string, any> = { deleted_at: null };
+    if (office_id) {
+      this.assertObjectId(office_id, 'office_id');
+      match.office_id = new Types.ObjectId(office_id);
+    }
+    // an explicit status filter wins; otherwise refunds never count as takings
+    if (status) {
+      match.status = status;
+    } else {
+      match.status = { $ne: SaleStatus.REFUNDED };
+    }
+    if (payment_method) {
+      match.payment_method = payment_method;
+    }
+    if (search?.trim()) {
+      const rx = new RegExp(this.escapeRegex(search.trim()), 'i');
+      match.$or = [{ invoice_no: rx }, { customer_name: rx }];
+    }
+
+    const range = this.dateRange(date_from, date_to);
+    const isToday = !range;
+    if (range) {
+      match.created_at = range;
+    } else {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      match.created_at = { $gte: start };
     }
 
     const [row] = await this.saleModel
-      .aggregate<{ today_total: number; transactions: number }>([
+      .aggregate<{
+        today_total: number;
+        transactions: number;
+        borrow_total: number;
+        paid_total: number;
+        cash_total: number;
+        online_total: number;
+      }>([
         { $match: match },
         {
           $group: {
             _id: null,
             today_total: { $sum: '$total' },
             transactions: { $sum: 1 },
+            borrow_total: { $sum: { $ifNull: ['$borrow_amount', 0] } },
+            paid_total: {
+              $sum: { $ifNull: ['$paid_amount', '$total'] },
+            },
+            cash_total: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$payment_method', PaymentMethod.CASH] },
+                  '$total',
+                  0,
+                ],
+              },
+            },
+            online_total: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$payment_method', PaymentMethod.ONLINE] },
+                  '$total',
+                  0,
+                ],
+              },
+            },
           },
         },
       ])
@@ -232,6 +318,11 @@ export class SalesService {
       today_total,
       transactions,
       average_order: transactions ? round2(today_total / transactions) : 0,
+      borrow_total: round2(row?.borrow_total ?? 0),
+      paid_total: round2(row?.paid_total ?? 0),
+      cash_total: round2(row?.cash_total ?? 0),
+      online_total: round2(row?.online_total ?? 0),
+      is_today: isToday,
     };
   }
 
@@ -257,10 +348,11 @@ export class SalesService {
 
   async remove(id: string): Promise<{ id: string; deleted: boolean }> {
     const sale = await this.findOne(id);
-    // a deleted sale no longer holds stock
+    // a deleted sale no longer holds stock, nor is anything still owed for it
     if (this.holdsStock(sale.status)) {
       await this.applyStock(this.stockNeed(sale.lines), 'give');
     }
+    await this.releaseBorrow(sale);
     sale.deleted_at = new Date();
     await sale.save();
     return { id, deleted: true };
@@ -276,6 +368,7 @@ export class SalesService {
       if (this.holdsStock(sale.status)) {
         await this.applyStock(this.stockNeed(sale.lines), 'give');
       }
+      await this.releaseBorrow(sale);
       sale.deleted_at = new Date();
       await sale.save();
       deleted++;
@@ -327,20 +420,154 @@ export class SalesService {
       : new Map<string, number>();
     await this.applyStockDiff(before, after);
 
-    sale.customer_name = dto.customer_name?.trim() || sale.customer_name;
+    const total = round2(built.subtotal - discount);
+    const isBorrow = dto.is_borrow ?? sale.is_borrow;
+    const { paid_amount, borrow_amount } = this.splitPayment(
+      { is_borrow: isBorrow, paid_amount: dto.paid_amount ?? sale.paid_amount },
+      total,
+    );
+    const borrowBefore = this.borrowHold(sale);
+    const customer = await this.resolveCustomer(
+      {
+        ...dto,
+        office_id: officeId,
+        customer_id: dto.customer_id ?? sale.customer_id?.toString() ?? null,
+        customer_name: dto.customer_name ?? sale.customer_name,
+        customer_mobile: dto.customer_mobile ?? sale.customer_mobile,
+        is_borrow: isBorrow,
+      },
+      borrow_amount,
+    );
+
+    if (customer) {
+      sale.customer_id = customer._id;
+      sale.customer_name = `${customer.first_name} ${customer.last_name}`.trim();
+      sale.customer_mobile = customer.mobile_no;
+    } else {
+      sale.customer_id = null;
+      sale.customer_name = dto.customer_name?.trim() || sale.customer_name;
+      sale.customer_mobile = dto.customer_mobile ?? sale.customer_mobile;
+    }
+    sale.is_borrow = isBorrow;
     sale.payment_method = dto.payment_method ?? sale.payment_method;
     sale.lines = built.lines;
     sale.items_count = built.items_count;
     sale.subtotal = built.subtotal;
     sale.discount = discount;
-    sale.total = round2(built.subtotal - discount);
+    sale.total = total;
+    sale.paid_amount = paid_amount;
+    sale.borrow_amount = borrow_amount;
     sale.status = nextStatus;
     const editor = this.toObjectIdOrNull(userId);
     if (editor) {
       sale.sold_by = editor;
     }
 
-    return sale.save();
+    const saved = await sale.save();
+    // move the owed amount off the old customer and onto the new one
+    await this.applyBorrowDiff(borrowBefore, this.borrowHold(saved));
+    return saved;
+  }
+
+  /** Split the total into what was paid now and what stays owed. */
+  private splitPayment(
+    dto: { is_borrow?: boolean; paid_amount?: number },
+    total: number,
+  ): { paid_amount: number; borrow_amount: number } {
+    // not a credit sale => paid in full, nothing owed
+    if (!dto.is_borrow) {
+      return { paid_amount: total, borrow_amount: 0 };
+    }
+    const paid = Math.min(Math.max(dto.paid_amount ?? total, 0), total);
+    return {
+      paid_amount: round2(paid),
+      borrow_amount: round2(total - paid),
+    };
+  }
+
+  /**
+   * Who owes the money: the picked customer, or one created from the typed
+   * name + mobile. Only a borrowed sale needs it.
+   */
+  private async resolveCustomer(
+    dto: {
+      office_id?: string;
+      customer_id?: string | null;
+      customer_name?: string;
+      customer_mobile?: string | null;
+      is_borrow?: boolean;
+    },
+    borrowAmount: number,
+    fallbackOfficeId?: string,
+  ): Promise<CustomerDocument | null> {
+    const officeId = dto.office_id ?? fallbackOfficeId;
+    if (!officeId) return null;
+
+    // an explicitly picked customer always wins, borrowed or not
+    if (dto.customer_id) {
+      return this.customers.findOne(dto.customer_id, officeId);
+    }
+    if (!dto.is_borrow || borrowAmount <= 0) return null;
+
+    if (!dto.customer_mobile?.trim()) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: {
+          customer_mobile: [
+            'pick a customer or enter a mobile no to sell on credit',
+          ],
+        },
+      });
+    }
+    return this.customers.findOrCreateForSale(officeId, {
+      name: dto.customer_name,
+      mobile_no: dto.customer_mobile,
+    });
+  }
+
+  /** Move the owed amount between customers after an edit. */
+  private async applyBorrowDiff(
+    before: { customerId: Types.ObjectId | null; amount: number },
+    after: { customerId: Types.ObjectId | null; amount: number },
+  ) {
+    const sameCustomer =
+      before.customerId &&
+      after.customerId &&
+      before.customerId.toString() === after.customerId.toString();
+
+    if (sameCustomer) {
+      await this.customers.adjustBorrow(
+        after.customerId!,
+        round2(after.amount - before.amount),
+      );
+      return;
+    }
+    if (before.customerId && before.amount) {
+      await this.customers.adjustBorrow(before.customerId, -before.amount);
+    }
+    if (after.customerId && after.amount) {
+      await this.customers.adjustBorrow(after.customerId, after.amount);
+    }
+  }
+
+  /** Take this sale's owed amount off the customer entirely. */
+  private async releaseBorrow(sale: SaleDocument) {
+    const hold = this.borrowHold(sale);
+    if (hold.customerId && hold.amount) {
+      await this.customers.adjustBorrow(hold.customerId, -hold.amount);
+    }
+  }
+
+  /** What this sale currently charges to a customer's balance. */
+  private borrowHold(sale: SaleDocument): {
+    customerId: Types.ObjectId | null;
+    amount: number;
+  } {
+    const active = this.holdsStock(sale.status);
+    return {
+      customerId: sale.customer_id ?? null,
+      amount: active ? (sale.borrow_amount ?? 0) : 0,
+    };
   }
 
   /**
@@ -498,6 +725,9 @@ export class SalesService {
       items_count: d.items_count,
       payment_method: d.payment_method,
       total: d.total,
+      paid_amount: d.paid_amount ?? d.total,
+      borrow_amount: d.borrow_amount ?? 0,
+      is_borrow: d.is_borrow ?? false,
       status: d.status,
       created_at: json.created_at ?? null,
     };

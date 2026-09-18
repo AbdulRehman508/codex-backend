@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsMongoId,
@@ -42,11 +43,46 @@ export class CreateSaleDto {
   @IsMongoId()
   office_id!: string;
 
+  @ApiPropertyOptional({
+    description: 'Saved customer picked from the list; omit for a walk-in',
+  })
+  @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
+  @IsMongoId()
+  customer_id?: string | null;
+
   @ApiPropertyOptional({ example: 'Ali Hassan', default: 'Walk-in' })
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   customer_name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Required when borrowing without a picked customer',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.trim() === '' ? null : value,
+  )
+  @IsString()
+  customer_mobile?: string | null;
+
+  @ApiPropertyOptional({ default: false, description: 'Sell on credit' })
+  @IsOptional()
+  @IsBoolean()
+  is_borrow?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Amount paid now. Defaults to the full total.',
+    example: 500,
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === '' || value === null ? undefined : Number(value),
+  )
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  paid_amount?: number;
 
   @ApiPropertyOptional({ enum: PaymentMethod, default: PaymentMethod.CASH })
   @IsOptional()

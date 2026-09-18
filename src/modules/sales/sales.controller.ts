@@ -41,10 +41,12 @@ export class SalesController {
 
   // declared before :id so the literal path wins
   @Get('stats')
-  @ApiOperation({ summary: "Today's total, transaction count, average order" })
-  @ApiQuery({ name: 'office_id', required: false })
-  async stats(@Query('office_id') officeId?: string) {
-    const data = await this.salesService.stats(officeId);
+  @ApiOperation({
+    summary:
+      'Totals for the same filters as the list (today when no date range)',
+  })
+  async stats(@Query() query: QuerySaleDto) {
+    const data = await this.salesService.stats(query);
     return { message: 'Sale stats fetched', data };
   }
 

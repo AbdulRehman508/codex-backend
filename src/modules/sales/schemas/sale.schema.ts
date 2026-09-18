@@ -58,12 +58,14 @@ export const SaleLineSchema = SchemaFactory.createForClass(SaleLine);
         _id?: { toString(): string };
         id?: string;
         office_id?: unknown;
+        customer_id?: unknown;
         sold_by?: unknown;
         deleted_at?: unknown;
       };
       obj.id = obj._id ? obj._id.toString() : undefined;
       delete obj._id;
       if (obj.office_id) obj.office_id = String(obj.office_id);
+      if (obj.customer_id) obj.customer_id = String(obj.customer_id);
       if (obj.sold_by) obj.sold_by = String(obj.sold_by);
       delete obj.deleted_at;
       return obj;
@@ -78,8 +80,25 @@ export class Sale {
   @Prop({ required: true, uppercase: true, trim: true })
   invoice_no!: string;
 
+  // set when the cashier picked a saved customer, or when a borrowed sale
+  // created one; null for a plain walk-in typed by hand
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Customer',
+    default: null,
+  })
+  customer_id?: Types.ObjectId | null;
+
+  // printed on the bill — the typed text when no customer was picked
   @Prop({ required: true, trim: true, default: 'Walk-in' })
   customer_name!: string;
+
+  @Prop({ type: String, trim: true, default: null })
+  customer_mobile?: string | null;
+
+  // sold on credit: the unpaid part lands on the customer's balance
+  @Prop({ default: false })
+  is_borrow!: boolean;
 
   @Prop({ required: true, enum: PaymentMethod, default: PaymentMethod.CASH })
   payment_method!: PaymentMethod;
@@ -99,6 +118,14 @@ export class Sale {
 
   @Prop({ type: Number, required: true, min: 0, default: 0 })
   total!: number;
+
+  // what the customer handed over now
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  paid_amount!: number;
+
+  // total - paid_amount; mirrored onto the customer's running balance
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  borrow_amount!: number;
 
   @Prop({ required: true, enum: SaleStatus, default: SaleStatus.COMPLETED })
   status!: SaleStatus;
