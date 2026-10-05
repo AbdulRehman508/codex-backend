@@ -222,13 +222,18 @@ export class SalesService {
     const sale = await this.findOne(id, officeId);
     const office = await this.officeModel
       .findById(sale.office_id)
-      .select('office_name office_address office_mobile_no')
+      .select(
+        'office_name office_address office_mobile_no office_logo payment_methods',
+      )
       .exec();
     return {
       ...(sale.toJSON() as Record<string, any>),
       office_name: office?.office_name ?? null,
+      office_logo: office?.office_logo ?? null,
       office_address: office?.office_address ?? null,
       office_mobile_no: office?.office_mobile_no ?? null,
+      // scan-to-pay QRs printed at the foot of online-sale receipts
+      office_payment_methods: office?.payment_methods ?? [],
     };
   }
 

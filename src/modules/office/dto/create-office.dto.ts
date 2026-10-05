@@ -1,12 +1,41 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
+  ValidateNested,
 } from 'class-validator';
+
+export class OfficePaymentMethodDto {
+  @ApiProperty({ example: 'JazzCash' })
+  @IsString()
+  @IsNotEmpty()
+  provider!: string;
+
+  @ApiProperty({ example: 'Pak Loam Store' })
+  @IsString()
+  @IsNotEmpty()
+  account_title!: string;
+
+  @ApiProperty({ example: '03001234567', description: 'Wallet no, IBAN or Raast ID' })
+  @IsString()
+  @IsNotEmpty()
+  account_number!: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Provider's merchant QR: a base64 data URL to upload, the stored URL to keep it, or null to drop it",
+  })
+  @IsOptional()
+  @IsString()
+  qr_image?: string | null;
+}
 import {
   // MembershipLevel,
   // MembershipType,
@@ -78,4 +107,15 @@ export class CreateOfficeDto {
   @IsOptional()
   @IsString()
   office_logo?: string;
+
+  @ApiPropertyOptional({
+    type: [OfficePaymentMethodDto],
+    description: 'Online payment options; the whole list replaces the stored one',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => OfficePaymentMethodDto)
+  payment_methods?: OfficePaymentMethodDto[];
 }

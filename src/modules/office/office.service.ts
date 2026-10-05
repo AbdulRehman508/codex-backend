@@ -9,10 +9,17 @@ import { isValidObjectId, Model } from 'mongoose';
 import { StorageService } from '../../common/storage/storage.service';
 import { RolesService } from '../roles/roles.service';
 import { BulkDeleteDto } from './dto/bulk-delete.dto';
-import { CreateOfficeDto } from './dto/create-office.dto';
+import {
+  CreateOfficeDto,
+  OfficePaymentMethodDto,
+} from './dto/create-office.dto';
 import { QueryOfficeDto, SortOrder } from './dto/query-office.dto';
 import { UpdateOfficeDto } from './dto/update-office.dto';
-import { Office, OfficeDocument } from './schemas/office.schema';
+import {
+  Office,
+  OfficeDocument,
+  OfficePaymentMethod,
+} from './schemas/office.schema';
 
 // fields returned on the list endpoint (multi-select grid)
 const LIST_FIELDS =
@@ -30,7 +37,10 @@ export class OfficeService {
   async create(dto: CreateOfficeDto): Promise<OfficeDocument> {
     await this.assertEmailUnique(dto.office_email);
 
-    const payload: Partial<Office> = { ...dto };
+    const payload: Partial<Office> = {
+      ...dto,
+      payment_methods: this.resolvePaymentMethods(dto.payment_methods ?? []),
+    };
     if (dto.office_logo) {
       payload.office_logo = this.fileStorage.saveBase64Image(dto.office_logo);
     }
@@ -153,8 +163,18 @@ export class OfficeService {
       await this.assertEmailUnique(dto.office_email, id);
     }
 
-    const { office_logo, ...rest } = dto;
+    const { office_logo, payment_methods, ...rest } = dto;
     Object.assign(doc, rest);
+
+    // the list replaces the stored one; existing QR images may be kept by URL
+    if (payment_methods) {
+      doc.payment_methods = this.resolvePaymentMethods(
+        payment_methods,
+        (doc.payment_methods ?? [])
+          .map((m) => m.qr_image)
+          .filter((u): u is string => !!u),
+      );
+    }
 
     // empty/null logo => keep existing; new base64 => replace
     if (office_logo && office_logo.trim()) {
@@ -174,6 +194,36 @@ export class OfficeService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Store each method's QR: a data URL is uploaded, a URL is kept only if it is
+   * one of this office's already-stored images (so a client can't point the
+   * receipt at an arbitrary external image), anything else clears it.
+   */
+  private resolvePaymentMethods(
+    methods: OfficePaymentMethodDto[],
+    storedImages: string[] = [],
+  ): OfficePaymentMethod[] {
+    const known = new Set(storedImages);
+    return methods.map((m) => {
+      const qr = m.qr_image?.trim() ?? '';
+      let qr_image: string | null = null;
+      if (qr.startsWith('data:')) {
+        qr_image = this.fileStorage.saveBase64Image(qr, {
+          folder: 'payment-qr',
+          field: 'payment_methods',
+        });
+      } else if (qr && known.has(qr)) {
+        qr_image = qr;
+      }
+      return {
+        provider: m.provider.trim(),
+        account_title: m.account_title.trim(),
+        account_number: m.account_number.trim(),
+        qr_image,
+      };
+    });
   }
 
   /** Clear `is_main` everywhere except the office that just claimed it. */
