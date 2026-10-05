@@ -19,6 +19,32 @@ export enum OfficeStatus {
   INACTIVE = 'inactive',
 }
 
+/**
+ * One way a customer can pay this office online (JazzCash, Easypaisa, a bank
+ * account, Raast...). Printed as a QR on online-sale receipts.
+ */
+@Schema({ _id: false })
+export class OfficePaymentMethod {
+  // JazzCash / Easypaisa / Bank Transfer / Raast / ... (free text)
+  @Prop({ required: true, trim: true })
+  provider!: string;
+
+  @Prop({ required: true, trim: true })
+  account_title!: string;
+
+  // wallet number, IBAN or Raast ID
+  @Prop({ required: true, trim: true })
+  account_number!: string;
+
+  // the provider's own merchant QR (stored URL). When present it is printed
+  // instead of the generated one — only official QRs open the wallet app.
+  @Prop({ type: String, default: null })
+  qr_image?: string | null;
+}
+
+export const OfficePaymentMethodSchema =
+  SchemaFactory.createForClass(OfficePaymentMethod);
+
 @Schema({
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   toJSON: {
@@ -77,6 +103,10 @@ export class Office {
   // stored URL/path, never raw base64
   @Prop()
   office_logo?: string;
+
+  // online payment options shown as QR codes on online-sale receipts
+  @Prop({ type: [OfficePaymentMethodSchema], default: [] })
+  payment_methods!: OfficePaymentMethod[];
 
   @Prop({ type: Date, default: null })
   deleted_at?: Date | null;
