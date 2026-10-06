@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export enum SortOrder {
   ASC = 'asc',
@@ -24,11 +24,12 @@ export class QueryOfficeDto {
   @Min(1)
   page: number = 1;
 
-  @ApiPropertyOptional({ default: 10, minimum: 1 })
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 200 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value as string, 10))
   @IsInt()
   @Min(1)
+  @Max(200)
   limit: number = 10;
 
   @ApiPropertyOptional({

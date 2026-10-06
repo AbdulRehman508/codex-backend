@@ -17,10 +17,12 @@ export interface AccessModule {
 export const ACCESS_MODULES: ReadonlyArray<AccessModule> = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'sales', label: 'Sales' },
-  // parked with their side-nav entries until the modules are finished.
-  // Re-adding a key restores it for every role at no access.
-  // { key: 'stock', label: 'Stock' },
+  { key: 'stock', label: 'Stock' },
   { key: 'products', label: 'Products' },
+  { key: 'purchase', label: 'Purchase' },
+  { key: 'supplier', label: 'Supplier' },
+  // parked with its side-nav entry until the module is finished.
+  // Re-adding the key restores it for every role at no access.
   // { key: 'location', label: 'Location' },
   { key: 'reports', label: 'Reports' },
 

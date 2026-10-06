@@ -39,6 +39,8 @@ export interface ProductRow {
   barcode: string | null;
   price: number;
   quantity: number;
+  /** latest landed cost from a purchase, for margin reporting */
+  cost_price: number;
   description: string | null;
   status: string;
   rack_location_id: string | null;
@@ -103,7 +105,7 @@ export class ProductsService {
     page: number;
     limit: number;
   }> {
-    const { page, limit, search, office_id, rack_id, status, sort, order } =
+    const { page, limit, search, office_id, rack_id, status, barcode, sort, order } =
       query;
 
     const filter: Record<string, any> = { deleted_at: null };
@@ -112,6 +114,10 @@ export class ProductsService {
     }
     if (status) {
       filter.status = status;
+    }
+    // a scanner sends the exact code — never a partial match
+    if (barcode?.trim()) {
+      filter.barcode = barcode.trim();
     }
     // "products in rack X" without a join: resolve the rack's bins first
     if (rack_id) {
@@ -322,6 +328,7 @@ export class ProductsService {
       barcode: d.barcode ?? null,
       price: d.price ?? 0,
       quantity: d.quantity ?? 0,
+      cost_price: d.cost_price ?? 0,
       description: d.description ?? null,
       status: d.status,
       rack_location_id: str(d.rack_location_id),

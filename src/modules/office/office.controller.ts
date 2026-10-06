@@ -21,9 +21,11 @@ import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreateOfficeDto } from './dto/create-office.dto';
 import { QueryOfficeDto } from './dto/query-office.dto';
 import { UpdateOfficeDto } from './dto/update-office.dto';
+import { AdminOnly } from '../../common/permissions/permissions.decorator';
 import { OfficeService } from './office.service';
 
 @ApiTags('offices')
+@AdminOnly()
 @ApiBearerAuth()
 @Controller('offices')
 export class OfficeController {

@@ -22,6 +22,7 @@ import { BulkDeleteRoleDto } from './dto/bulk-delete-role.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { QueryRoleDto } from './dto/query-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { RolesService } from './roles.service';
 
 @ApiTags('roles')
@@ -30,6 +31,7 @@ import { RolesService } from './roles.service';
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
+  @RequirePermission('role', 'view')
   @Get()
   @ApiOperation({ summary: 'List roles (pagination, search, office filter)' })
   @ApiResponse({ status: 200, description: 'Paginated list' })
@@ -38,6 +40,7 @@ export class RolesController {
     return { message: 'Roles fetched', data: result };
   }
 
+  @RequirePermission('role', 'view')
   @Get('options')
   @ApiOperation({ summary: 'List roles for one or more offices (dropdown)' })
   @ApiQuery({
@@ -56,6 +59,7 @@ export class RolesController {
     return { message: 'Roles fetched', data };
   }
 
+  @RequirePermission('role', 'view')
   @Get(':id')
   @ApiOperation({ summary: 'Get single role' })
   async findOne(@Param('id', ParseIntPipe) id: number) {
@@ -63,6 +67,7 @@ export class RolesController {
     return { message: 'Role fetched', data };
   }
 
+  @RequirePermission('role', 'create')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create role' })
@@ -73,6 +78,7 @@ export class RolesController {
     return { message: 'Role created', data };
   }
 
+  @RequirePermission('role', 'edit')
   @Put(':id')
   @ApiOperation({ summary: 'Update role' })
   async update(
@@ -83,6 +89,7 @@ export class RolesController {
     return { message: 'Role updated', data };
   }
 
+  @RequirePermission('role', 'delete')
   @Delete()
   @ApiOperation({ summary: 'Bulk delete by ids' })
   async bulkRemove(@Body() dto: BulkDeleteRoleDto) {
@@ -90,6 +97,7 @@ export class RolesController {
     return { message: 'Roles deleted', data: result };
   }
 
+  @RequirePermission('role', 'delete')
   @Delete(':id')
   @ApiOperation({ summary: 'Delete one role' })
   async remove(@Param('id', ParseIntPipe) id: number) {

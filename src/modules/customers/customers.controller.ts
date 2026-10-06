@@ -24,6 +24,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { CustomersService } from './customers.service';
 
 @ApiTags('customers')
@@ -32,6 +33,7 @@ import { CustomersService } from './customers.service';
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
+  @RequirePermission('customer', 'view')
   @Get()
   @ApiOperation({ summary: 'List customers (pagination, search, sort)' })
   @ApiResponse({ status: 200, description: 'Paginated slim list' })
@@ -40,6 +42,7 @@ export class CustomersController {
     return { message: 'Customers fetched', data: result };
   }
 
+  @RequirePermission('customer', 'view')
   @Get(':id')
   @ApiOperation({ summary: 'Get single customer (full detail)' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -51,6 +54,7 @@ export class CustomersController {
     return { message: 'Customer fetched', data: customer.toJSON() };
   }
 
+  @RequirePermission('customer', 'create')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create customer' })
@@ -61,6 +65,7 @@ export class CustomersController {
     return { message: 'Customer created', data: customer.toJSON() };
   }
 
+  @RequirePermission('customer', 'create')
   @Post(':id/payments')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Receive a payment against the borrow balance' })
@@ -81,6 +86,7 @@ export class CustomersController {
     };
   }
 
+  @RequirePermission('customer', 'edit')
   @Put(':id')
   @ApiOperation({ summary: 'Full update (photo omitted = keep)' })
   async update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
@@ -88,6 +94,7 @@ export class CustomersController {
     return { message: 'Customer updated', data: customer.toJSON() };
   }
 
+  @RequirePermission('customer', 'edit')
   @Patch(':id')
   @ApiOperation({ summary: 'Partial update (toggle customer_status)' })
   async patch(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
@@ -95,6 +102,7 @@ export class CustomersController {
     return { message: 'Customer updated', data: customer.toJSON() };
   }
 
+  @RequirePermission('customer', 'delete')
   @Delete()
   @ApiOperation({ summary: 'Bulk soft-delete by ids' })
   async bulkRemove(@Body() dto: BulkDeleteDto) {
@@ -102,6 +110,7 @@ export class CustomersController {
     return { message: 'Customers deleted', data: result };
   }
 
+  @RequirePermission('customer', 'delete')
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete one customer' })
   async remove(@Param('id') id: string) {

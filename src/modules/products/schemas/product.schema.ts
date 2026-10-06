@@ -62,6 +62,10 @@ export class Product {
   @Prop({ type: Number, required: true, min: 0, default: 0 })
   quantity!: number;
 
+  // what the last received purchase cost per unit; `price` stays the sell price
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  cost_price!: number;
+
   @Prop({ trim: true })
   description?: string;
 

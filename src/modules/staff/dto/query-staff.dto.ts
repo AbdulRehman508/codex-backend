@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  Max,
 } from 'class-validator';
 
 export enum SortOrder {
@@ -31,11 +32,12 @@ export class QueryStaffDto {
   @Min(1)
   page: number = 1;
 
-  @ApiPropertyOptional({ default: 10, minimum: 1 })
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 200 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value as string, 10))
   @IsInt()
   @Min(1)
+  @Max(200)
   limit: number = 10;
 
   @ApiPropertyOptional({

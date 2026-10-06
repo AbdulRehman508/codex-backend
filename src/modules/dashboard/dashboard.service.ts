@@ -11,11 +11,20 @@ import {
   ProductStatus,
 } from '../products/schemas/product.schema';
 import {
+  ACTIVE_PURCHASE_STATUSES,
+  Purchase,
+  PurchaseDocument,
+} from '../purchases/schemas/purchase.schema';
+import {
   PaymentMethod,
   Sale,
   SaleDocument,
   SaleStatus,
 } from '../sales/schemas/sale.schema';
+import {
+  Supplier,
+  SupplierDocument,
+} from '../suppliers/schemas/supplier.schema';
 import { QueryDashboardDto } from './dto/query-dashboard.dto';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -40,6 +49,10 @@ export interface DashboardOverview {
     refunds: Compared;
     /** what customers owe right now — a balance, not a period figure */
     outstanding_borrow: number;
+    /** value of the stock bought in from suppliers during the period */
+    purchases: Compared;
+    /** what this office owes suppliers right now — also a balance */
+    outstanding_payable: number;
   };
   /** one entry per bucket that had sales; the client fills the empty ones */
   trend: { bucket: string; revenue: number; orders: number }[];
@@ -71,6 +84,10 @@ export class DashboardService {
     private readonly productModel: Model<ProductDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
+    @InjectModel(Purchase.name)
+    private readonly purchaseModel: Model<PurchaseDocument>,
+    @InjectModel(Supplier.name)
+    private readonly supplierModel: Model<SupplierDocument>,
   ) {}
 
   async overview(query: QueryDashboardDto): Promise<DashboardOverview> {
@@ -110,6 +127,9 @@ export class DashboardService {
       topProducts,
       recentOrders,
       lowStock,
+      purchases,
+      prevPurchases,
+      payable,
     ] = await Promise.all([
       this.periodTotals(scope, from, to),
       this.periodTotals(scope, prevFrom, prevTo),
@@ -121,6 +141,9 @@ export class DashboardService {
       this.topProducts(scope, from, to),
       this.recentOrders(scope, from, to),
       this.lowStock(scope, query.low_stock),
+      this.purchaseTotal(scope, from, to),
+      this.purchaseTotal(scope, prevFrom, prevTo),
+      this.outstandingPayable(scope),
     ]);
 
     return {
@@ -136,6 +159,8 @@ export class DashboardService {
         new_customers: { value: newCustomers, previous: prevCustomers },
         refunds: { value: current.refunds, previous: previous.refunds },
         outstanding_borrow: outstanding,
+        purchases: { value: purchases, previous: prevPurchases },
+        outstanding_payable: payable,
       },
       trend,
       payment_mix: paymentMix,
@@ -200,6 +225,39 @@ export class DashboardService {
       .aggregate<{ total: number }>([
         { $match: { ...scope, borrow_amount: { $gt: 0 } } },
         { $group: { _id: null, total: { $sum: '$borrow_amount' } } },
+      ])
+      .exec();
+    return round2(row?.total ?? 0);
+  }
+
+  /** What the stock bought in during the period cost. */
+  private async purchaseTotal(
+    scope: Record<string, any>,
+    from: Date,
+    to: Date,
+  ): Promise<number> {
+    const [row] = await this.purchaseModel
+      .aggregate<{ total: number }>([
+        {
+          $match: {
+            ...scope,
+            // ordered bills have not landed yet; cancelled ones never will
+            status: { $in: ACTIVE_PURCHASE_STATUSES },
+            created_at: { $gte: from, $lte: to },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$total' } } },
+      ])
+      .exec();
+    return round2(row?.total ?? 0);
+  }
+
+  /** The mirror of the customers' borrow: what the office owes suppliers. */
+  private async outstandingPayable(scope: Record<string, any>): Promise<number> {
+    const [row] = await this.supplierModel
+      .aggregate<{ total: number }>([
+        { $match: { ...scope, payable_amount: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: '$payable_amount' } } },
       ])
       .exec();
     return round2(row?.total ?? 0);

@@ -2,11 +2,16 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+
+  // security headers. CSP is off: this API serves JSON plus the Swagger UI,
+  // which needs inline styles/scripts of its own.
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   // larger JSON limit so base64 logos fit
   app.useBodyParser('json', { limit: '5mb' });

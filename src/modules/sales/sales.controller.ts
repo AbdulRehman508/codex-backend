@@ -23,6 +23,7 @@ import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { SalesService } from './sales.service';
 
 @ApiTags('sales')
@@ -31,6 +32,7 @@ import { SalesService } from './sales.service';
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
+  @RequirePermission('sales', 'view')
   @Get()
   @ApiOperation({ summary: 'List sales (pagination, search, filter, sort)' })
   @ApiResponse({ status: 200, description: 'Paginated list' })
@@ -40,6 +42,7 @@ export class SalesController {
   }
 
   // declared before :id so the literal path wins
+  @RequirePermission('sales', 'view')
   @Get('stats')
   @ApiOperation({
     summary:
@@ -50,6 +53,7 @@ export class SalesController {
     return { message: 'Sale stats fetched', data };
   }
 
+  @RequirePermission('sales', 'view')
   @Get(':id')
   @ApiOperation({ summary: 'Get one sale with its lines (receipt / print)' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -61,6 +65,7 @@ export class SalesController {
     return { message: 'Sale fetched', data };
   }
 
+  @RequirePermission('sales', 'create')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a sale and take its items out of stock' })
@@ -74,6 +79,7 @@ export class SalesController {
     return { message: 'Sale created', data: sale.toJSON() };
   }
 
+  @RequirePermission('sales', 'edit')
   @Put(':id')
   @ApiOperation({ summary: 'Full update (stock is re-balanced to match)' })
   async update(
@@ -85,6 +91,7 @@ export class SalesController {
     return { message: 'Sale updated', data: sale.toJSON() };
   }
 
+  @RequirePermission('sales', 'edit')
   @Patch(':id')
   @ApiOperation({
     summary: 'Partial update (status change; refund returns the stock)',
@@ -98,6 +105,7 @@ export class SalesController {
     return { message: 'Sale updated', data: sale.toJSON() };
   }
 
+  @RequirePermission('sales', 'delete')
   @Delete()
   @ApiOperation({ summary: 'Bulk soft-delete by ids (stock returned)' })
   async bulkRemove(@Body() dto: BulkDeleteDto) {
@@ -105,6 +113,7 @@ export class SalesController {
     return { message: 'Sales deleted', data: result };
   }
 
+  @RequirePermission('sales', 'delete')
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete one sale (stock returned)' })
   async remove(@Param('id') id: string) {
