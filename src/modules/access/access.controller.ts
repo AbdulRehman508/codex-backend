@@ -7,6 +7,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { AccessService } from './access.service';
 import { UpdateAccessDto } from './dto/update-access.dto';
 
@@ -17,12 +18,14 @@ export class AccessController {
   constructor(private readonly accessService: AccessService) {}
 
   // declared before ':roleId' so /access/modules isn't parsed as an id
+  @RequirePermission('access_control', 'view')
   @Get('modules')
   @ApiOperation({ summary: 'List controllable module catalog' })
   getModules() {
     return { message: 'Modules fetched', data: this.accessService.getModules() };
   }
 
+  @RequirePermission('access_control', 'view')
   @Get(':roleId')
   @ApiOperation({ summary: 'Get the permission matrix for a role' })
   async getForRole(@Param('roleId', ParseIntPipe) roleId: number) {
@@ -30,6 +33,7 @@ export class AccessController {
     return { message: 'Access fetched', data };
   }
 
+  @RequirePermission('access_control', 'edit')
   @Put(':roleId')
   @ApiOperation({ summary: 'Save the permission matrix for a role' })
   async save(

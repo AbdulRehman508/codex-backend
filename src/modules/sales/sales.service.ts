@@ -672,47 +672,76 @@ export class SalesService {
     await this.commitStock(diff);
   }
 
-  /** check every decrease has stock behind it, then $inc each product */
+  /**
+   * Apply the stock movement. Each decrease is a single conditional update
+   * (`quantity >= wanted` in the same query), so two cashiers selling the last
+   * unit at once can never push stock negative — the loser gets the error.
+   * Anything already applied is rolled back before throwing.
+   */
   private async commitStock(diff: Map<string, number>) {
     const entries = [...diff.entries()].filter(([, delta]) => delta !== 0);
     if (!entries.length) return;
 
+    // give stock back first: that can never fail and frees units for the takes
+    const gives = entries.filter(([, delta]) => delta > 0);
     const takes = entries.filter(([, delta]) => delta < 0);
-    if (takes.length) {
-      const products = await this.productModel
-        .find({ _id: { $in: takes.map(([id]) => id) }, deleted_at: null })
-        .select('name quantity')
-        .exec();
-      const byId = new Map(products.map((p) => [p._id.toString(), p]));
-      for (const [productId, delta] of takes) {
-        const product = byId.get(productId);
-        const wanted = -delta;
-        if (!product) {
-          throw new BadRequestException({
-            message: 'Validation failed',
-            errors: { lines: [`product ${productId} does not exist`] },
-          });
-        }
-        if (product.quantity < wanted) {
-          throw new BadRequestException({
-            message: 'Validation failed',
-            errors: {
-              lines: [
-                `"${product.name}" has only ${product.quantity} in stock, ${wanted} requested`,
-              ],
-            },
-          });
-        }
-      }
-    }
 
     await Promise.all(
-      entries.map(([productId, delta]) =>
+      gives.map(([productId, delta]) =>
         this.productModel
           .updateOne({ _id: productId }, { $inc: { quantity: delta } })
           .exec(),
       ),
     );
+
+    const applied: [string, number][] = [];
+    try {
+      for (const [productId, delta] of takes) {
+        const wanted = -delta;
+        const res = await this.productModel
+          .findOneAndUpdate(
+            { _id: productId, deleted_at: null, quantity: { $gte: wanted } },
+            { $inc: { quantity: delta } },
+            { new: true },
+          )
+          .select('name quantity')
+          .exec();
+
+        if (!res) {
+          // either the product vanished or someone else took the last units
+          const product = await this.productModel
+            .findOne({ _id: productId, deleted_at: null })
+            .select('name quantity')
+            .exec();
+          throw new BadRequestException({
+            message: 'Validation failed',
+            errors: {
+              lines: [
+                product
+                  ? `"${product.name}" has only ${product.quantity} in stock, ${wanted} requested`
+                  : `product ${productId} does not exist`,
+              ],
+            },
+          });
+        }
+        applied.push([productId, delta]);
+      }
+    } catch (e) {
+      // undo this call's takes and gives so the sale fails cleanly
+      await Promise.all([
+        ...applied.map(([productId, delta]) =>
+          this.productModel
+            .updateOne({ _id: productId }, { $inc: { quantity: -delta } })
+            .exec(),
+        ),
+        ...gives.map(([productId, delta]) =>
+          this.productModel
+            .updateOne({ _id: productId }, { $inc: { quantity: -delta } })
+            .exec(),
+        ),
+      ]);
+      throw e;
+    }
   }
 
   /** INV-0001, sequential inside the office */

@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  Max,
 } from 'class-validator';
 import { ProductStatus } from '../schemas/product.schema';
 
@@ -34,11 +35,12 @@ export class QueryProductDto {
   @Min(1)
   page: number = 1;
 
-  @ApiPropertyOptional({ default: 10, minimum: 1 })
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 200 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value as string, 10))
   @IsInt()
   @Min(1)
+  @Max(200)
   limit: number = 10;
 
   @ApiPropertyOptional({ description: 'Matches name, sku and barcode' })
@@ -50,6 +52,13 @@ export class QueryProductDto {
   @IsOptional()
   @IsMongoId()
   office_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'Exact barcode match — what a scanner sends at the counter',
+  })
+  @IsOptional()
+  @IsString()
+  barcode?: string;
 
   @ApiPropertyOptional({ description: 'Filter by rack' })
   @IsOptional()

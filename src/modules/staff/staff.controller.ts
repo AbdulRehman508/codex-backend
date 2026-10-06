@@ -21,6 +21,7 @@ import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { QueryStaffDto } from './dto/query-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { StaffService } from './staff.service';
 
 @ApiTags('staff')
@@ -29,6 +30,7 @@ import { StaffService } from './staff.service';
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
+  @RequirePermission('staff', 'view')
   @Get()
   @ApiOperation({ summary: 'List staff (pagination, search, filter, sort)' })
   @ApiResponse({ status: 200, description: 'Paginated slim list' })
@@ -37,6 +39,7 @@ export class StaffController {
     return { message: 'Staff fetched', data: result };
   }
 
+  @RequirePermission('staff', 'view')
   @Get(':id')
   @ApiOperation({ summary: 'Get single staff (full detail)' })
   async findOne(@Param('id') id: string) {
@@ -44,6 +47,7 @@ export class StaffController {
     return { message: 'Staff fetched', data: staff.toJSON() };
   }
 
+  @RequirePermission('staff', 'create')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create staff' })
@@ -54,6 +58,7 @@ export class StaffController {
     return { message: 'Staff created', data: staff.toJSON() };
   }
 
+  @RequirePermission('staff', 'edit')
   @Put(':id')
   @ApiOperation({ summary: 'Full update (password/photo omitted = keep)' })
   async update(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
@@ -61,6 +66,7 @@ export class StaffController {
     return { message: 'Staff updated', data: staff.toJSON() };
   }
 
+  @RequirePermission('staff', 'edit')
   @Patch(':id')
   @ApiOperation({ summary: 'Partial update (toggle staff_status)' })
   async patch(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
@@ -68,6 +74,7 @@ export class StaffController {
     return { message: 'Staff updated', data: staff.toJSON() };
   }
 
+  @RequirePermission('staff', 'delete')
   @Delete()
   @ApiOperation({ summary: 'Bulk soft-delete by ids' })
   async bulkRemove(@Body() dto: BulkDeleteDto) {
@@ -75,6 +82,7 @@ export class StaffController {
     return { message: 'Staff deleted', data: result };
   }
 
+  @RequirePermission('staff', 'delete')
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete one staff' })
   async remove(@Param('id') id: string) {

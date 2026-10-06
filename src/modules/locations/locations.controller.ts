@@ -24,6 +24,7 @@ import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreateRackDto } from './dto/create-rack.dto';
 import { QueryRackDto } from './dto/query-rack.dto';
 import { UpdateRackDto } from './dto/update-rack.dto';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { LocationsService } from './locations.service';
 
 @ApiTags('locations')
@@ -32,6 +33,7 @@ import { LocationsService } from './locations.service';
 export class LocationsController {
   constructor(private readonly locationsService: LocationsService) {}
 
+  @RequirePermission('location', 'view')
   @Get()
   @ApiOperation({ summary: 'List racks (pagination, search, filter, sort)' })
   @ApiResponse({ status: 200, description: 'Paginated list' })
@@ -42,6 +44,7 @@ export class LocationsController {
 
   // --- dependent dropdowns (declared before :id so paths stay unambiguous) ---
 
+  @RequirePermission('location', 'view')
   @Get(':rackId/rows')
   @ApiOperation({ summary: 'Rows of a rack' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -53,6 +56,7 @@ export class LocationsController {
     return { message: 'Rows fetched', data };
   }
 
+  @RequirePermission('location', 'view')
   @Get(':rackId/rows/:row/columns')
   @ApiOperation({ summary: 'Columns of a row' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -65,6 +69,7 @@ export class LocationsController {
     return { message: 'Columns fetched', data };
   }
 
+  @RequirePermission('location', 'view')
   @Get(':rackId/rows/:row/columns/:column/bins')
   @ApiOperation({ summary: 'Bins of a column (assignable locations)' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -83,6 +88,7 @@ export class LocationsController {
     return { message: 'Bins fetched', data };
   }
 
+  @RequirePermission('location', 'view')
   @Get(':id')
   @ApiOperation({ summary: 'Get one rack with all generated locations' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -94,6 +100,7 @@ export class LocationsController {
     return { message: 'Location fetched', data };
   }
 
+  @RequirePermission('location', 'create')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create rack and generate its row/column/bin grid' })
@@ -107,6 +114,7 @@ export class LocationsController {
     return { message: 'Location created', data: rack.toJSON() };
   }
 
+  @RequirePermission('location', 'edit')
   @Put(':id')
   @ApiOperation({ summary: 'Full update (regenerates the grid when it changes)' })
   async update(
@@ -118,6 +126,7 @@ export class LocationsController {
     return { message: 'Location updated', data: rack.toJSON() };
   }
 
+  @RequirePermission('location', 'edit')
   @Patch(':id')
   @ApiOperation({ summary: 'Partial update (toggle status)' })
   async patch(
@@ -129,6 +138,7 @@ export class LocationsController {
     return { message: 'Location updated', data: rack.toJSON() };
   }
 
+  @RequirePermission('location', 'delete')
   @Delete()
   @ApiOperation({ summary: 'Bulk soft-delete by ids' })
   async bulkRemove(@Body() dto: BulkDeleteDto) {
@@ -136,6 +146,7 @@ export class LocationsController {
     return { message: 'Locations deleted', data: result };
   }
 
+  @RequirePermission('location', 'delete')
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete a rack and its locations' })
   @ApiResponse({ status: 409, description: 'Some locations still hold products' })

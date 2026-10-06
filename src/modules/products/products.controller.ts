@@ -23,6 +23,7 @@ import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { RequirePermission } from '../../common/permissions/permissions.decorator';
 import { ProductsService } from './products.service';
 
 @ApiTags('products')
@@ -31,6 +32,7 @@ import { ProductsService } from './products.service';
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
+  @RequirePermission('products', 'view')
   @Get()
   @ApiOperation({
     summary: 'List products (slim: name, price, quantity, status)',
@@ -41,6 +43,7 @@ export class ProductsController {
     return { message: 'Products fetched', data: result };
   }
 
+  @RequirePermission('products', 'view')
   @Get(':id')
   @ApiOperation({ summary: 'Get one product with its location' })
   @ApiQuery({ name: 'office_id', required: false })
@@ -52,6 +55,7 @@ export class ProductsController {
     return { message: 'Product fetched', data };
   }
 
+  @RequirePermission('products', 'create')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create product' })
@@ -65,6 +69,7 @@ export class ProductsController {
     return { message: 'Product created', data };
   }
 
+  @RequirePermission('products', 'edit')
   @Put(':id')
   @ApiOperation({ summary: 'Full update' })
   async update(
@@ -76,6 +81,7 @@ export class ProductsController {
     return { message: 'Product updated', data };
   }
 
+  @RequirePermission('products', 'edit')
   @Patch(':id')
   @ApiOperation({ summary: 'Partial update (toggle status, move location)' })
   async patch(
@@ -87,6 +93,7 @@ export class ProductsController {
     return { message: 'Product updated', data };
   }
 
+  @RequirePermission('products', 'delete')
   @Delete()
   @ApiOperation({ summary: 'Bulk soft-delete by ids' })
   async bulkRemove(@Body() dto: BulkDeleteDto) {
@@ -94,6 +101,7 @@ export class ProductsController {
     return { message: 'Products deleted', data: result };
   }
 
+  @RequirePermission('products', 'delete')
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete one product' })
   async remove(@Param('id') id: string) {
