@@ -9,6 +9,10 @@ import { CountersService } from '../../common/counters/counters.service';
 import { Office, OfficeDocument } from '../office/schemas/office.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { SuppliersService } from '../suppliers/suppliers.service';
+import {
+  ProductLot,
+  ProductLotDocument,
+} from './schemas/product-lot.schema';
 import { BulkDeleteDto } from './dto/bulk-delete.dto';
 import { CreatePurchaseDto, PurchaseLineDto } from './dto/create-purchase.dto';
 import { QueryPurchaseDto, SortOrder } from './dto/query-purchase.dto';
@@ -53,6 +57,8 @@ export class PurchasesService {
     private readonly productModel: Model<ProductDocument>,
     @InjectModel(Office.name)
     private readonly officeModel: Model<OfficeDocument>,
+    @InjectModel(ProductLot.name)
+    private readonly lotModel: Model<ProductLotDocument>,
     private readonly counters: CountersService,
     private readonly suppliers: SuppliersService,
   ) {}
@@ -112,6 +118,7 @@ export class PurchasesService {
 
       if (this.holdsStock(status)) {
         await this.rememberCost(lines);
+        await this.syncLots(purchase);
         if (due_amount > 0) {
           await this.suppliers.adjustPayable(supplier._id, due_amount);
         }
@@ -341,6 +348,7 @@ export class PurchasesService {
     if (editor) purchase.created_by = purchase.created_by ?? editor;
 
     const saved = await purchase.save();
+    await this.syncLots(saved);
     if (this.holdsStock(nextStatus)) {
       await this.rememberCost(built.lines);
     }
@@ -349,11 +357,39 @@ export class PurchasesService {
 
   /** Take back the stock this bill added and clear what it made payable. */
   private async releaseStockAndPayable(purchase: PurchaseDocument) {
+    await this.lotModel.deleteMany({ purchase_id: purchase._id }).exec();
     if (!this.holdsStock(purchase.status)) return;
     await this.applyStock(this.stockDelta(purchase.lines), -1);
     if (purchase.due_amount) {
       await this.suppliers.adjustPayable(purchase.supplier_id, -purchase.due_amount);
     }
+  }
+
+  /**
+   * Keep the lot register in step with the bill: one entry per line that
+   * carries a batch number or an expiry date. Lines without either are
+   * ordinary stock and need no lot.
+   */
+  private async syncLots(purchase: PurchaseDocument) {
+    await this.lotModel.deleteMany({ purchase_id: purchase._id }).exec();
+    if (!this.holdsStock(purchase.status)) return;
+
+    const lots = purchase.lines
+      .filter((l) => l.batch_no?.trim() || l.expiry_date)
+      .map((l) => ({
+        office_id: purchase.office_id,
+        product_id: l.product_id,
+        product_name: l.name,
+        sku: l.sku ?? '',
+        batch_no: l.batch_no?.trim() ?? '',
+        expiry_date: l.expiry_date ?? null,
+        quantity: l.quantity,
+        cost_price: l.cost_price,
+        purchase_id: purchase._id,
+        purchase_no: purchase.purchase_no,
+        supplier_name: purchase.supplier_name,
+      }));
+    if (lots.length) await this.lotModel.insertMany(lots);
   }
 
   /**
@@ -396,6 +432,8 @@ export class PurchasesService {
         cost_price: l.cost_price,
         quantity: l.quantity,
         total: round2(l.cost_price * l.quantity),
+        batch_no: l.batch_no?.trim() ?? '',
+        expiry_date: l.expiry_date ? new Date(l.expiry_date) : null,
       };
     });
 

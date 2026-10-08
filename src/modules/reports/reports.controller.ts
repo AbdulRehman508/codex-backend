@@ -2,6 +2,8 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   BaseReportDto,
+  DayCloseDto,
+  ExpiryReportDto,
   SalesReportDto,
   StockReportDto,
 } from './dto/query-report.dto';
@@ -62,5 +64,25 @@ export class ReportsController {
   async payables(@Query() query: BaseReportDto) {
     const data = await this.reportsService.payables(query);
     return { message: 'Payables report fetched', data };
+  }
+
+  @RequirePermission('reports', 'view')
+  @Get('expiry')
+  @ApiOperation({
+    summary: 'Batches running out of date, soonest first',
+  })
+  async expiry(@Query() query: ExpiryReportDto) {
+    const data = await this.reportsService.expiry(query);
+    return { message: 'Expiry report fetched', data };
+  }
+
+  @RequirePermission('reports', 'view')
+  @Get('day-close')
+  @ApiOperation({
+    summary: 'One day: takings, credit given, payments out and the cash drawer',
+  })
+  async dayClose(@Query() query: DayCloseDto) {
+    const data = await this.reportsService.dayClose(query);
+    return { message: 'Day close fetched', data };
   }
 }

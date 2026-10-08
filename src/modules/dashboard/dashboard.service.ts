@@ -72,7 +72,14 @@ export interface DashboardOverview {
     status: string;
     created_at: string | null;
   }[];
-  low_stock: { id: string; name: string; sku: string; quantity: number }[];
+  low_stock: {
+    id: string;
+    name: string;
+    sku: string;
+    quantity: number;
+    /** the product own reorder level, 0 when it uses the office-wide one */
+    min_stock: number;
+  }[];
 }
 
 @Injectable()
@@ -397,21 +404,35 @@ export class DashboardService {
     scope: Record<string, any>,
     threshold: number,
   ): Promise<DashboardOverview['low_stock']> {
+    // a product's own reorder level wins; 0 means "use the office-wide mark"
     const docs = await this.productModel
-      .find({
-        ...scope,
-        status: ProductStatus.ACTIVE,
-        quantity: { $lte: threshold },
-      })
-      .select('name sku quantity')
-      .sort({ quantity: 1, name: 1 })
-      .limit(8)
+      .aggregate<{
+        _id: Types.ObjectId;
+        name: string;
+        sku: string;
+        quantity: number;
+        min_stock: number;
+      }>([
+        { $match: { ...scope, status: ProductStatus.ACTIVE } },
+        {
+          $addFields: {
+            reorder_level: {
+              $cond: [{ $gt: ['$min_stock', 0] }, '$min_stock', threshold],
+            },
+          },
+        },
+        { $match: { $expr: { $lte: ['$quantity', '$reorder_level'] } } },
+        { $sort: { quantity: 1, name: 1 } },
+        { $limit: 8 },
+        { $project: { name: 1, sku: 1, quantity: 1, min_stock: 1 } },
+      ])
       .exec();
     return docs.map((d) => ({
-      id: d._id.toString(),
+      id: String(d._id),
       name: d.name,
       sku: d.sku,
       quantity: d.quantity,
+      min_stock: d.min_stock ?? 0,
     }));
   }
 }

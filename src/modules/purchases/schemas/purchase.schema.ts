@@ -40,6 +40,14 @@ export class PurchaseLine {
 
   @Prop({ type: Number, required: true, min: 0 })
   total!: number;
+
+  /** supplier batch / lot number, when the goods carry one */
+  @Prop({ trim: true, default: '' })
+  batch_no!: string;
+
+  /** when this lot expires; feeds the expiry report */
+  @Prop({ type: Date, default: null })
+  expiry_date?: Date | null;
 }
 
 export const PurchaseLineSchema = SchemaFactory.createForClass(PurchaseLine);

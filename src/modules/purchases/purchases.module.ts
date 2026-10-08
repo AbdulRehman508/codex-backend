@@ -4,6 +4,10 @@ import { CountersModule } from '../../common/counters/counters.module';
 import { Office, OfficeSchema } from '../office/schemas/office.schema';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
 import { SuppliersModule } from '../suppliers/suppliers.module';
+import {
+  ProductLot,
+  ProductLotSchema,
+} from './schemas/product-lot.schema';
 import { Purchase, PurchaseSchema } from './schemas/purchase.schema';
 import { PurchasesController } from './purchases.controller';
 import { PurchasesService } from './purchases.service';
@@ -12,6 +16,8 @@ import { PurchasesService } from './purchases.service';
   imports: [
     MongooseModule.forFeature([
       { name: Purchase.name, schema: PurchaseSchema },
+      // batch / expiry register, written when a bill lands
+      { name: ProductLot.name, schema: ProductLotSchema },
       // Product for the stock ledger, Office for the FK check
       { name: Product.name, schema: ProductSchema },
       { name: Office.name, schema: OfficeSchema },

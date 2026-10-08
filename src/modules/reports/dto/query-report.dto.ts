@@ -102,3 +102,48 @@ export class StockReportDto extends BaseReportDto {
   @IsBoolean()
   low_only?: boolean;
 }
+
+/** A single day's close-out, in the viewer's own timezone. */
+export class DayCloseDto {
+  @ApiPropertyOptional({ description: 'Office the day belongs to' })
+  @IsOptional()
+  @IsMongoId()
+  office_id?: string;
+
+  @ApiPropertyOptional({
+    description: 'The day to close, yyyy-MM-dd. Defaults to today.',
+  })
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+
+  @ApiPropertyOptional({
+    description: 'IANA timezone the day is measured in, e.g. Asia/Karachi',
+    default: 'UTC',
+  })
+  @IsOptional()
+  @IsString()
+  tz?: string;
+}
+
+/** Lots running out of date, or already past it. */
+export class ExpiryReportDto extends BaseReportDto {
+  @ApiPropertyOptional({
+    description: 'Flag lots expiring within this many days',
+    default: 30,
+    minimum: 0,
+    maximum: 365,
+  })
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value as string, 10))
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  within_days: number = 30;
+
+  @ApiPropertyOptional({ description: 'Only lots already past their date' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  expired_only?: boolean;
+}

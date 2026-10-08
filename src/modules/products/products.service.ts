@@ -41,6 +41,12 @@ export interface ProductRow {
   quantity: number;
   /** latest landed cost from a purchase, for margin reporting */
   cost_price: number;
+  /** reorder level; 0 = fall back to the office-wide low-stock threshold */
+  min_stock: number;
+  /** what one unit of quantity is called */
+  unit: string;
+  /** units in one supplier pack */
+  pack_size: number;
   description: string | null;
   status: string;
   rack_location_id: string | null;
@@ -329,6 +335,9 @@ export class ProductsService {
       price: d.price ?? 0,
       quantity: d.quantity ?? 0,
       cost_price: d.cost_price ?? 0,
+      min_stock: d.min_stock ?? 0,
+      unit: d.unit ?? 'pcs',
+      pack_size: d.pack_size ?? 1,
       description: d.description ?? null,
       status: d.status,
       rack_location_id: str(d.rack_location_id),

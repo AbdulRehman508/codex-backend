@@ -10,7 +10,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { ProductStatus } from '../schemas/product.schema';
+import { ProductStatus, ProductUnit } from '../schemas/product.schema';
 
 export class CreateProductDto {
   @ApiProperty({ description: 'Office the product belongs to' })
@@ -52,6 +52,40 @@ export class CreateProductDto {
   @IsInt()
   @Min(0)
   quantity?: number;
+
+  @ApiPropertyOptional({
+    example: 5,
+    minimum: 0,
+    default: 0,
+    description:
+      'Reorder level: at or below this the product is flagged low. 0 = use the office-wide threshold.',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === '' || value === null ? 0 : parseInt(value as string, 10),
+  )
+  @IsInt()
+  @Min(0)
+  min_stock?: number;
+
+  @ApiPropertyOptional({ enum: ProductUnit, default: ProductUnit.PCS })
+  @IsOptional()
+  @IsEnum(ProductUnit)
+  unit?: ProductUnit;
+
+  @ApiPropertyOptional({
+    example: 24,
+    minimum: 1,
+    default: 1,
+    description: 'Units in one supplier pack (carton of 24 => 24).',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === '' || value === null ? 1 : parseInt(value as string, 10),
+  )
+  @IsInt()
+  @Min(1)
+  pack_size?: number;
 
   @ApiPropertyOptional({ example: 'Business laptop, 16 GB RAM' })
   @IsOptional()

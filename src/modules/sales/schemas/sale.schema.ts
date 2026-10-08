@@ -116,6 +116,21 @@ export class Sale {
   @Prop({ type: Number, required: true, min: 0, default: 0 })
   discount!: number;
 
+  // tax snapshot: the office rate at the time of the sale, never looked up
+  // again, so a later rate change cannot rewrite an old bill
+  @Prop({ trim: true, default: '' })
+  tax_name!: string;
+
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  tax_rate!: number;
+
+  /** true when the line prices already carried the tax */
+  @Prop({ type: Boolean, required: true, default: false })
+  tax_inclusive!: boolean;
+
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  tax_amount!: number;
+
   @Prop({ type: Number, required: true, min: 0, default: 0 })
   total!: number;
 

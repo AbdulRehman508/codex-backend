@@ -87,6 +87,36 @@ describe('OfficeScopeGuard', () => {
     ).resolves.toBe(true);
   });
 
+  it('allows a transfer between two offices the user holds', async () => {
+    await build({ role: 'Cashier' }, { office_ids: [OFFICE_A, OFFICE_B] });
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          user,
+          query: {},
+          params: {},
+          body: { office_id: OFFICE_A, to_office_id: OFFICE_B },
+        }),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('blocks a transfer whose far end the user does not hold', async () => {
+    await build({ role: 'Cashier' }, { office_ids: [OFFICE_A] });
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          user,
+          query: {},
+          params: {},
+          body: { office_id: OFFICE_A, to_office_id: OFFICE_B },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('blocks a user with no offices at all', async () => {
     await build({ role: 'Cashier' }, { office_ids: [] });
 
