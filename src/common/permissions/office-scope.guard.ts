@@ -46,8 +46,8 @@ export class OfficeScopeGuard implements CanActivate {
     const user = req.user;
     if (!user) return true; // the JWT guard already rejected this
 
-    const requested = this.requestedOffice(req);
-    if (!requested) return true; // nothing office-scoped on this call
+    const requested = this.requestedOffices(req);
+    if (!requested.length) return true; // nothing office-scoped on this call
 
     const role = await this.roleModel
       .findById(user.role_id)
@@ -63,19 +63,25 @@ export class OfficeScopeGuard implements CanActivate {
       .exec();
     const allowed = (staff?.office_ids ?? []).map((o) => o.toString());
 
-    if (!allowed.includes(requested)) {
+    // every office named on the call must be one the user is assigned to —
+    // a transfer names two, and both ends need the check
+    if (requested.some((office) => !allowed.includes(office))) {
       throw new ForbiddenException('You are not assigned to that office');
     }
     return true;
   }
 
-  private requestedOffice(
+  /** `office_id`, plus the two ends of a transfer, wherever they appear. */
+  private requestedOffices(
     req: Request & { body?: Record<string, unknown> },
-  ): string | null {
-    const fromQuery = req.query?.['office_id'];
-    const fromParam = req.params?.['office_id'];
-    const fromBody = req.body?.['office_id'];
-    const value = fromQuery ?? fromParam ?? fromBody;
-    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  ): string[] {
+    const keys = ['office_id', 'from_office_id', 'to_office_id'];
+    const found = new Set<string>();
+    for (const key of keys) {
+      const value =
+        req.query?.[key] ?? req.params?.[key] ?? req.body?.[key] ?? null;
+      if (typeof value === 'string' && value.trim()) found.add(value.trim());
+    }
+    return [...found];
   }
 }

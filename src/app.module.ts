@@ -3,9 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AuditInterceptor } from './common/audit/audit.interceptor';
+import { AuditModule } from './common/audit/audit.module';
 import { OfficeScopeGuard } from './common/permissions/office-scope.guard';
 import { PermissionsGuard } from './common/permissions/permissions.guard';
 import { PermissionsModule } from './common/permissions/permissions.module';
+import { TrashModule } from './common/trash/trash.module';
 import { join } from 'path';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
@@ -45,6 +48,8 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
     // scraper. Login has its own tighter limit.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     PermissionsModule,
+    AuditModule,
+    TrashModule,
     DataBaseModule,
     AuthModule,
     AccessModule,
@@ -71,6 +76,8 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
     { provide: APP_GUARD, useClass: OfficeScopeGuard },
     // wrap success responses into { success, message, data }
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
+    // record every successful change: who, what, when (reads are not logged)
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     // consistent error envelope + validation field errors
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // DTO validation -> 400 { message, errors }

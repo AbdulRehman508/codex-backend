@@ -108,6 +108,28 @@ export class Office {
   @Prop({ type: [OfficePaymentMethodSchema], default: [] })
   payment_methods!: OfficePaymentMethod[];
 
+  // ---- sales tax, applied per branch ----
+
+  /** off by default: a shop that does not charge tax never sees it */
+  @Prop({ type: Boolean, required: true, default: false })
+  tax_enabled!: boolean;
+
+  /** what it is called on the bill: GST, VAT, Sales Tax ... */
+  @Prop({ trim: true, default: 'Tax' })
+  tax_name!: string;
+
+  /** percent, e.g. 17 for 17% */
+  @Prop({ type: Number, required: true, min: 0, max: 100, default: 0 })
+  tax_rate!: number;
+
+  /** true: shelf prices already include the tax, so it is only broken out */
+  @Prop({ type: Boolean, required: true, default: false })
+  tax_inclusive!: boolean;
+
+  /** registration number printed on the bill, when the shop has one */
+  @Prop({ trim: true, default: '' })
+  tax_number!: string;
+
   @Prop({ type: Date, default: null })
   deleted_at?: Date | null;
 }

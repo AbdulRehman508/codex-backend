@@ -90,7 +90,8 @@ export class SalesService {
     }
 
     const status = dto.status ?? SaleStatus.COMPLETED;
-    const total = round2(subtotal - discount);
+    const tax = await this.taxFor(dto.office_id, round2(subtotal - discount));
+    const total = tax.total;
     const { paid_amount, borrow_amount } = this.splitPayment(dto, total);
     // a borrowed sale needs someone to owe the money
     const customer = await this.resolveCustomer(dto, borrow_amount);
@@ -116,6 +117,10 @@ export class SalesService {
         items_count,
         subtotal,
         discount,
+        tax_name: tax.tax_name,
+        tax_rate: tax.tax_rate,
+        tax_inclusive: tax.tax_inclusive,
+        tax_amount: tax.tax_amount,
         total,
         paid_amount,
         borrow_amount,
@@ -223,7 +228,7 @@ export class SalesService {
     const office = await this.officeModel
       .findById(sale.office_id)
       .select(
-        'office_name office_address office_mobile_no office_logo payment_methods',
+        'office_name office_address office_mobile_no office_logo payment_methods tax_number',
       )
       .exec();
     return {
@@ -234,6 +239,8 @@ export class SalesService {
       office_mobile_no: office?.office_mobile_no ?? null,
       // scan-to-pay QRs printed at the foot of online-sale receipts
       office_payment_methods: office?.payment_methods ?? [],
+      // tax registration, printed under the shop name when the shop has one
+      office_tax_number: office?.tax_number ?? '',
     };
   }
 
@@ -425,7 +432,9 @@ export class SalesService {
       : new Map<string, number>();
     await this.applyStockDiff(before, after);
 
-    const total = round2(built.subtotal - discount);
+    // an edited bill is re-taxed at the office's current rate
+    const tax = await this.taxFor(officeId, round2(built.subtotal - discount));
+    const total = tax.total;
     const isBorrow = dto.is_borrow ?? sale.is_borrow;
     const { paid_amount, borrow_amount } = this.splitPayment(
       { is_borrow: isBorrow, paid_amount: dto.paid_amount ?? sale.paid_amount },
@@ -459,6 +468,10 @@ export class SalesService {
     sale.items_count = built.items_count;
     sale.subtotal = built.subtotal;
     sale.discount = discount;
+    sale.tax_name = tax.tax_name;
+    sale.tax_rate = tax.tax_rate;
+    sale.tax_inclusive = tax.tax_inclusive;
+    sale.tax_amount = tax.tax_amount;
     sale.total = total;
     sale.paid_amount = paid_amount;
     sale.borrow_amount = borrow_amount;
@@ -793,6 +806,54 @@ export class SalesService {
         errors: { office_id: ['office does not exist'] },
       });
     }
+  }
+
+  /**
+   * Work the branch's tax into a bill. Two ways round:
+   *  - exclusive: tax sits on top of the net, so the customer pays more
+   *  - inclusive: the shelf price already held it, so it is only broken out
+   * The rate is snapshotted onto the sale — changing it later never rewrites
+   * an old bill.
+   */
+  private async taxFor(
+    officeId: string,
+    taxable: number,
+  ): Promise<{
+    tax_name: string;
+    tax_rate: number;
+    tax_inclusive: boolean;
+    tax_amount: number;
+    total: number;
+  }> {
+    const office = await this.officeModel
+      .findById(officeId)
+      .select('tax_enabled tax_name tax_rate tax_inclusive')
+      .lean()
+      .exec();
+
+    const rate = office?.tax_enabled ? (office.tax_rate ?? 0) : 0;
+    if (!rate || taxable <= 0) {
+      return {
+        tax_name: office?.tax_name ?? '',
+        tax_rate: 0,
+        tax_inclusive: !!office?.tax_inclusive,
+        tax_amount: 0,
+        total: round2(taxable),
+      };
+    }
+
+    const inclusive = !!office?.tax_inclusive;
+    const tax_amount = inclusive
+      ? round2(taxable - taxable / (1 + rate / 100))
+      : round2((taxable * rate) / 100);
+
+    return {
+      tax_name: office?.tax_name || 'Tax',
+      tax_rate: rate,
+      tax_inclusive: inclusive,
+      tax_amount,
+      total: inclusive ? round2(taxable) : round2(taxable + tax_amount),
+    };
   }
 
   private assertObjectId(id: string, field = 'id') {

@@ -3,12 +3,14 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsDateString,
   IsEnum,
   IsInt,
   IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -30,6 +32,23 @@ export class PurchaseLineDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   cost_price!: number;
+
+  @ApiPropertyOptional({
+    example: 'B-2291',
+    description: 'Supplier batch / lot number, for goods that carry one',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  batch_no?: string;
+
+  @ApiPropertyOptional({
+    example: '2027-03-31',
+    description: 'When this lot expires. Feeds the expiry report.',
+  })
+  @IsOptional()
+  @IsDateString()
+  expiry_date?: string;
 }
 
 export class CreatePurchaseDto {

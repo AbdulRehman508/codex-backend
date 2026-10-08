@@ -9,6 +9,27 @@ export enum ProductStatus {
 }
 
 /**
+ * How a product is counted on the shelf. Stock is kept in whole units of
+ * this measure, so pick the smallest one the shop actually sells by.
+ */
+export enum ProductUnit {
+  PCS = 'pcs',
+  BOX = 'box',
+  CARTON = 'carton',
+  PACK = 'pack',
+  DOZEN = 'dozen',
+  KG = 'kg',
+  GRAM = 'g',
+  LITRE = 'litre',
+  ML = 'ml',
+  METRE = 'metre',
+  FOOT = 'foot',
+  BAG = 'bag',
+  ROLL = 'roll',
+  SET = 'set',
+}
+
+/**
  * A stock item. Its physical storage slot is a foreign key to a single
  * `rack_locations` document (rack -> row -> column -> bin), never free text.
  */
@@ -65,6 +86,21 @@ export class Product {
   // what the last received purchase cost per unit; `price` stays the sell price
   @Prop({ type: Number, required: true, min: 0, default: 0 })
   cost_price!: number;
+
+  /**
+   * Reorder level: at or below this the product counts as low and shows up on
+   * the reorder list. 0 means "use the office-wide low-stock threshold".
+   */
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  min_stock!: number;
+
+  /** What one unit of `quantity` is — a label; stock is always whole units. */
+  @Prop({ required: true, enum: ProductUnit, default: ProductUnit.PCS })
+  unit!: ProductUnit;
+
+  /** Units in one supplier pack (carton of 24 => 24); 1 = bought loose. */
+  @Prop({ type: Number, required: true, min: 1, default: 1 })
+  pack_size!: number;
 
   @Prop({ trim: true })
   description?: string;

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -7,8 +7,12 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -118,4 +122,44 @@ export class CreateOfficeDto {
   @ValidateNested({ each: true })
   @Type(() => OfficePaymentMethodDto)
   payment_methods?: OfficePaymentMethodDto[];
+
+  // ---- sales tax ----
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Charge sales tax on this branch\'s bills',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  tax_enabled?: boolean;
+
+  @ApiPropertyOptional({ example: 'GST', default: 'Tax' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  tax_name?: string;
+
+  @ApiPropertyOptional({ example: 17, minimum: 0, maximum: 100, default: 0 })
+  @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? 0 : Number(value)))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  tax_rate?: number;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Shelf prices already include the tax',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  tax_inclusive?: boolean;
+
+  @ApiPropertyOptional({ example: '1234567-8', description: 'Printed on the bill' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  tax_number?: string;
 }
