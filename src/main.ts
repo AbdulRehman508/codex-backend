@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
@@ -9,9 +10,46 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
-  // security headers. CSP is off: this API serves JSON plus the Swagger UI,
-  // which needs inline styles/scripts of its own.
-  app.use(helmet({ contentSecurityPolicy: false }));
+  // Security headers. The API answers JSON and serves uploaded images, so it
+  // needs nothing executable at all — `default-src 'none'` is the honest
+  // policy. The Swagger UI is the one exception: it ships inline styles and
+  // scripts, so that path gets its own, looser policy below.
+  const apiCsp = helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        'default-src': ["'none'"],
+        'img-src': ["'self'", 'data:'],
+        'frame-ancestors': ["'none'"],
+        'base-uri': ["'none'"],
+        'form-action': ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  });
+  const docsCsp = helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        'default-src': ["'self'"],
+        'script-src': ["'self'", "'unsafe-inline'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:', 'https://validator.swagger.io'],
+        'connect-src': ["'self'"],
+        'frame-ancestors': ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  });
+
+  app.use((req: { path?: string; url: string }, res: unknown, next: unknown) => {
+    const path = req.path ?? req.url;
+    const handler = path.startsWith('/api/docs') ? docsCsp : apiCsp;
+    return (handler as (q: unknown, s: unknown, n: unknown) => void)(req, res, next);
+  });
+
+  // the session token travels as an httpOnly cookie, so it has to be parsed
+  app.use(cookieParser());
 
   // larger JSON limit so base64 logos fit
   app.useBodyParser('json', { limit: '5mb' });
@@ -21,6 +59,7 @@ async function bootstrap() {
     origin: config.get<string>('corsOrigin')?.split(',') ?? true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // the browser only sends the session cookie when this is on
     credentials: true,
   });
 

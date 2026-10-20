@@ -99,8 +99,17 @@ Every successful change is written to the audit trail by `AuditInterceptor`
 from which IP. Reads are not logged, and no request body is ever stored, so
 passwords and uploaded images stay out of it. Entries roll off after 180 days.
 
+The browser's session is an **httpOnly cookie** (`codex_token`), so a script
+injected into the page cannot read it. An `Authorization: Bearer` header still
+works for the Swagger UI, the end-to-end suite and any non-browser client. The
+cookie is `SameSite=Lax`, and `Secure` whenever `NODE_ENV=production`.
+
 Passwords are bcrypt-hashed. Reset tokens are stored as SHA-256 hashes with a
-30-minute expiry and are single-use. `helmet` sets the response security headers.
+30-minute expiry and are single-use. `helmet` sets the response security
+headers, including a content security policy: `default-src 'none'` for the API,
+which answers JSON and images and needs nothing executable, and a looser one
+for `/api/docs`, which ships its own inline assets. The policy for the Angular
+app itself lives in `codex-frontend/deploy/nginx.conf`.
 
 > Hiding a button is not access control. Every endpoint is gated on the server,
 > independently of what the UI chooses to render.
@@ -108,9 +117,24 @@ Passwords are bcrypt-hashed. Reset tokens are stored as SHA-256 hashes with a
 ## Tests
 
 ```bash
-npm test             # unit tests
-npm run test:cov     # with coverage
+npm test                                 # unit tests (guards, pure logic)
+npm run test:cov                         # with coverage
+npm run test:e2e                         # end-to-end, against a running API
+npm run test:e2e -- transfers reports     # only the matching suites
 ```
+
+The suites in `test/e2e` drive the real API over HTTP: they sell stock, reverse
+purchases, race five tills at a single unit, and check that the permission
+matrix is enforced on the server rather than in the UI. They create and remove
+their own records, so point them at a database you can throw away:
+
+```bash
+DATABASE_NAME=codex_dev npm run start:dev
+API_BASE=http://localhost:3000/api npm run test:e2e
+```
+
+CI runs the lot on every push — typecheck, unit tests, build, seed, start the
+API, the full end-to-end suite, and a backup/restore round trip.
 
 ## Scripts
 
@@ -123,6 +147,12 @@ npm run test:cov     # with coverage
 | `npm run lint` | ESLint with `--fix` |
 | `npm run backup` | gzipped dump of every collection into `backups/` |
 | `npm run restore -- --latest --yes` | put the newest backup back |
+
+## Deploying
+
+See **DEPLOYMENT.md** — Docker in one command, or pm2 + nginx on a plain
+machine, plus the MongoDB replica-set conversion, HTTPS and a go-live
+checklist.
 
 ## Backups
 

@@ -18,6 +18,15 @@ export class ProfileController {
     return { message: 'Profile fetched', data };
   }
 
+  @Get('offices')
+  @ApiOperation({
+    summary: 'Offices the caller may work in (all of them for an admin)',
+  })
+  async listOffices(@CurrentUser('sub') userId: string) {
+    const data = await this.profileService.listOffices(userId);
+    return { message: 'Offices fetched', data };
+  }
+
   @Put()
   @ApiOperation({ summary: 'Update own editable profile fields' })
   async updateProfile(

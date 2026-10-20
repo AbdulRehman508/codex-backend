@@ -34,6 +34,14 @@ export interface ProfileResponse {
   updated_at?: string;
 }
 
+/** Just enough of an office to fill a picker. */
+export interface OfficePick {
+  id: string;
+  office_name: string;
+  office_status: string;
+  is_main: boolean;
+}
+
 @Injectable()
 export class ProfileService {
   constructor(
@@ -49,6 +57,39 @@ export class ProfileService {
   async getProfile(userId: string): Promise<ProfileResponse> {
     const staff = await this.findLive(userId);
     return this.build(staff);
+  }
+
+  /**
+   * The offices this user may work in — an admin gets every live office,
+   * anyone else only the ones they are assigned to.
+   *
+   * The offices module itself is admin-only, which is right for managing them
+   * but leaves a manager with no way to read the names its own header picker
+   * needs. This is that read, scoped to the caller.
+   */
+  async listOffices(userId: string): Promise<OfficePick[]> {
+    const staff = await this.findLive(userId);
+    const role = await this.roleModel.findById(staff.role_id).lean().exec();
+    const isAdmin = role?.role?.trim().toLowerCase() === 'admin';
+
+    const filter: Record<string, unknown> = { deleted_at: null };
+    if (!isAdmin) {
+      filter._id = { $in: staff.office_ids };
+    }
+
+    const offices = await this.officeModel
+      .find(filter)
+      .select('office_name office_status is_main')
+      .sort({ office_name: 1 })
+      .lean()
+      .exec();
+
+    return offices.map((o) => ({
+      id: o._id.toString(),
+      office_name: o.office_name,
+      office_status: o.office_status,
+      is_main: o.is_main,
+    }));
   }
 
   async updateProfile(

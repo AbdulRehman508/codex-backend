@@ -5,7 +5,10 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Res,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -19,12 +22,16 @@ import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { clearSessionCookie, setSessionCookie } from './session-cookie';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   // credential endpoints: 5 tries a minute per IP, so a password cannot be
   // brute-forced and the reset mailer cannot be used to spam
@@ -36,8 +43,19 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'JWT + user' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({ status: 403, description: 'Account inactive' })
-  async login(@Body() dto: LoginDto) {
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const data = await this.authService.login(dto);
+    // the browser gets the token as an httpOnly cookie it cannot read; the
+    // body still carries it for Swagger and for non-browser clients
+    setSessionCookie(
+      res,
+      data.token,
+      this.config.get<string>('jwt.expires'),
+      !!dto.remember_me,
+    );
     return { message: 'Logged in', data };
   }
 
@@ -53,7 +71,8 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout (stateless)' })
-  logout() {
+  logout(@Res({ passthrough: true }) res: Response) {
+    clearSessionCookie(res);
     return { message: 'Logged out', data: this.authService.logout() };
   }
 
