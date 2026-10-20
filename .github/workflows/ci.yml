@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: build, unit tests, end-to-end
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # a database of its own: the suites create and delete real records
+      DATABASE_HOST: localhost
+      DATABASE_PORT: '27017'
+      DATABASE_NAME: codex_ci
+      PORT: '3000'
+      APP_URL: http://localhost:3000
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      JWT_EXPIRES: 1d
+      API_BASE: http://localhost:3000/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Lint
+        run: npx eslint "{src,apps,libs,test}/**/*.ts"
+        continue-on-error: true
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Seed the database
+        run: npm run seed
+
+      - name: Start the API
+        run: |
+          node dist/main.js > api.log 2>&1 &
+          echo $! > api.pid
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_BASE/auth/login" \
+              -H 'Content-Type: application/json' -d '{}' || true)
+            if [ "$code" = "400" ] || [ "$code" = "401" ]; then echo "API up"; exit 0; fi
+            sleep 2
+          done
+          echo "API did not come up in time"; cat api.log; exit 1
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Backup / restore round trip
+        run: |
+          npm run backup
+          DATABASE_NAME=codex_ci_restore npm run restore -- --latest --yes
+
+      - name: API log (on failure)
+        if: failure()
+        run: tail -200 api.log || true
+
+      - name: Stop the API
+        if: always()
+        run: kill "$(cat api.pid)" 2>/dev/null || true

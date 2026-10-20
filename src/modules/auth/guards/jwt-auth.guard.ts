@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator';
+import { SESSION_COOKIE } from '../session-cookie';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -32,7 +33,7 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractToken(req);
 
     if (!token) {
-      throw new UnauthorizedException('Authorization bearer token missing');
+      throw new UnauthorizedException('Not signed in');
     }
 
     try {
@@ -47,7 +48,16 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
+  /**
+   * The browser sends the session as an httpOnly cookie it cannot read. A
+   * bearer header still works, for the Swagger UI, the end-to-end suite and
+   * any non-browser client.
+   */
   private extractToken(req: Request): string | undefined {
+    const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
+    const fromCookie = cookies?.[SESSION_COOKIE];
+    if (fromCookie) return fromCookie;
+
     const header = req.headers.authorization;
     if (!header) return undefined;
     const [type, token] = header.split(' ');

@@ -60,3 +60,6 @@ uploads/
 
 *.tsbuildinfo
 backups/
+
+logs/
+deploy/.env
