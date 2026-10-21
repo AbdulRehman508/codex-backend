@@ -47,6 +47,8 @@ export interface DashboardOverview {
     orders: Compared;
     new_customers: Compared;
     refunds: Compared;
+    /** revenue less the cost of what was sold, over the same period */
+    profit: Compared;
     /** what customers owe right now — a balance, not a period figure */
     outstanding_borrow: number;
     /** value of the stock bought in from suppliers during the period */
@@ -165,6 +167,7 @@ export class DashboardService {
         orders: { value: current.orders, previous: previous.orders },
         new_customers: { value: newCustomers, previous: prevCustomers },
         refunds: { value: current.refunds, previous: previous.refunds },
+        profit: { value: current.profit, previous: previous.profit },
         outstanding_borrow: outstanding,
         purchases: { value: purchases, previous: prevPurchases },
         outstanding_payable: payable,
@@ -184,13 +187,78 @@ export class DashboardService {
     scope: Record<string, any>,
     from: Date,
     to: Date,
-  ): Promise<{ revenue: number; orders: number; refunds: number }> {
+  ): Promise<{ revenue: number; orders: number; refunds: number; profit: number }> {
     const [row] = await this.saleModel
-      .aggregate<{ revenue: number; orders: number; refunds: number }>([
+      .aggregate<{
+        revenue: number;
+        orders: number;
+        refunds: number;
+        cost: number;
+      }>([
         { $match: { ...scope, created_at: { $gte: from, $lt: to } } },
+        {
+          // the cost of goods for the bills that stand, so the tile can show
+          // what was earned rather than only what was taken
+          $lookup: {
+            from: 'products',
+            let: { lines: { $ifNull: ['$lines', []] } },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $in: ['$_id', { $map: { input: '$$lines', in: '$$this.product_id' } }],
+                  },
+                },
+              },
+              { $project: { cost_price: 1 } },
+            ],
+            as: 'line_costs',
+          },
+        },
+        {
+          $addFields: {
+            sale_cost: {
+              $sum: {
+                $map: {
+                  input: { $ifNull: ['$lines', []] },
+                  as: 'line',
+                  in: {
+                    $multiply: [
+                      '$$line.quantity',
+                      {
+                        $ifNull: [
+                          {
+                            $first: {
+                              $map: {
+                                input: {
+                                  $filter: {
+                                    input: '$line_costs',
+                                    as: 'c',
+                                    cond: { $eq: ['$$c._id', '$$line.product_id'] },
+                                  },
+                                },
+                                in: '$$this.cost_price',
+                              },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
         {
           $group: {
             _id: null,
+            cost: {
+              $sum: {
+                $cond: [{ $ne: ['$status', SaleStatus.REFUNDED] }, '$sale_cost', 0],
+              },
+            },
             revenue: {
               $sum: {
                 $cond: [{ $ne: ['$status', SaleStatus.REFUNDED] }, '$total', 0],
@@ -210,10 +278,12 @@ export class DashboardService {
         },
       ])
       .exec();
+    const revenue = round2(row?.revenue ?? 0);
     return {
-      revenue: round2(row?.revenue ?? 0),
+      revenue,
       orders: row?.orders ?? 0,
       refunds: round2(row?.refunds ?? 0),
+      profit: round2(revenue - round2(row?.cost ?? 0)),
     };
   }
 
