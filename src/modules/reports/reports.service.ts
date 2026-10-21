@@ -45,6 +45,8 @@ import {
   SalesReportDto,
   SortOrder,
   StockReportDto,
+  ProfitPeriod,
+  ProfitReportDto,
 } from './dto/query-report.dto';
 
 /** Every report answers with the same envelope: a page of rows + totals. */
@@ -190,6 +192,66 @@ export interface ExpirySummary {
 }
 
 /** One day's close-out, the way a shopkeeper counts at closing time. */
+/** One bucket of the profit series — an hour for today, a day otherwise. */
+export interface ProfitPoint {
+  /** sort key, yyyy-MM-dd or yyyy-MM-dd HH */
+  key: string;
+  /** what the axis shows */
+  label: string;
+  revenue: number;
+  cost: number;
+  profit: number;
+}
+
+export interface ProfitTotals {
+  orders: number;
+  units: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  /** profit as a share of revenue, 0-100 */
+  margin: number;
+  /**
+   * Units sold whose product carries no cost price. Their cost counts as
+   * zero, so the profit reads high — the screen says so rather than quietly
+   * overstating what the shop earned.
+   */
+  uncosted_units: number;
+}
+
+export interface ProfitEarner {
+  product_id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  margin: number;
+}
+
+export interface ProfitReport {
+  period: {
+    key: string;
+    label: string;
+    from: string;
+    to: string;
+    tz: string;
+    /** 'hour' for a single day, 'day' for anything longer */
+    bucket: 'hour' | 'day';
+  };
+  totals: ProfitTotals;
+  /** the window of the same length immediately before this one */
+  previous: ProfitTotals;
+  /** percent change against that window; null when it had nothing to compare */
+  change: { revenue: number | null; profit: number | null };
+  series: ProfitPoint[];
+  /** best earners inside the period */
+  top: ProfitEarner[];
+  /** lines that sold at or below cost — worth a look */
+  losing: ProfitEarner[];
+}
+
 export interface DayClose {
   date: string;
   tz: string;
@@ -945,6 +1007,191 @@ export class ReportsService {
 
   // ---------- helpers ----------
 
+  // ---------- 7. profit ----------
+
+  /**
+   * What the shop actually earned in a period, and how that compares with the
+   * window before it.
+   *
+   * Costed the same way as the item-wise report — units sold x the product's
+   * latest landed cost — so the two screens never disagree. A refunded bill is
+   * left out entirely rather than netted off, because the goods came back.
+   */
+  async profit(query: ProfitReportDto): Promise<ProfitReport> {
+    const tz = safeTimeZone(query.tz);
+    const period = profitBounds(query, tz);
+    const span = period.to.getTime() - period.from.getTime();
+    const previous = {
+      from: new Date(period.from.getTime() - span - 1),
+      to: new Date(period.from.getTime() - 1),
+    };
+
+    const [current, before] = await Promise.all([
+      this.profitWindow(query.office_id, period.from, period.to, tz, period.bucket),
+      this.profitWindow(query.office_id, previous.from, previous.to, tz, period.bucket),
+    ]);
+
+    return {
+      period: {
+        key: period.key,
+        label: period.label,
+        from: period.from.toISOString(),
+        to: period.to.toISOString(),
+        tz,
+        bucket: period.bucket,
+      },
+      totals: current.totals,
+      previous: before.totals,
+      change: {
+        revenue: percentChange(before.totals.revenue, current.totals.revenue),
+        profit: percentChange(before.totals.profit, current.totals.profit),
+      },
+      series: current.series,
+      top: current.top,
+      losing: current.losing,
+    };
+  }
+
+  /** Totals, series and per-product rollup for one window. */
+  private async profitWindow(
+    officeId: string | undefined,
+    from: Date,
+    to: Date,
+    tz: string,
+    bucket: 'hour' | 'day',
+  ): Promise<{ totals: ProfitTotals; series: ProfitPoint[]; top: ProfitEarner[]; losing: ProfitEarner[] }> {
+    const match: Record<string, any> = {
+      deleted_at: null,
+      status: { $ne: SaleStatus.REFUNDED },
+      created_at: { $gte: from, $lte: to },
+    };
+    if (officeId) match.office_id = new Types.ObjectId(officeId);
+
+    const format = bucket === 'hour' ? '%Y-%m-%d %H' : '%Y-%m-%d';
+
+    const [result] = await this.saleModel
+      .aggregate<{
+        totals: (ProfitTotals & { orderIds: Types.ObjectId[] })[];
+        series: { _id: string; revenue: number; cost: number }[];
+        products: {
+          _id: Types.ObjectId;
+          name: string;
+          sku: string;
+          quantity: number;
+          revenue: number;
+          cost: number;
+        }[];
+      }>([
+        { $match: match },
+        { $unwind: '$lines' },
+        {
+          // the cost of goods, at the product's latest landed cost
+          $lookup: {
+            from: 'products',
+            let: { pid: '$lines.product_id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$pid'] } } },
+              { $project: { cost_price: 1 } },
+            ],
+            as: 'product',
+          },
+        },
+        {
+          $addFields: {
+            unit_cost: { $ifNull: [{ $first: '$product.cost_price' }, 0] },
+            line_cost: {
+              $multiply: [
+                '$lines.quantity',
+                { $ifNull: [{ $first: '$product.cost_price' }, 0] },
+              ],
+            },
+            bucket: {
+              $dateToString: { format, date: '$created_at', timezone: tz },
+            },
+          },
+        },
+        {
+          $facet: {
+            totals: [
+              {
+                $group: {
+                  _id: null,
+                  orderIds: { $addToSet: '$_id' },
+                  units: { $sum: '$lines.quantity' },
+                  uncosted_units: {
+                    $sum: { $cond: [{ $gt: ['$unit_cost', 0] }, 0, '$lines.quantity'] },
+                  },
+                  revenue: { $sum: '$lines.total' },
+                  cost: { $sum: '$line_cost' },
+                },
+              },
+            ],
+            series: [
+              {
+                $group: {
+                  _id: '$bucket',
+                  revenue: { $sum: '$lines.total' },
+                  cost: { $sum: '$line_cost' },
+                },
+              },
+              { $sort: { _id: 1 } },
+            ],
+            products: [
+              {
+                $group: {
+                  _id: '$lines.product_id',
+                  name: { $last: '$lines.name' },
+                  sku: { $last: '$lines.sku' },
+                  quantity: { $sum: '$lines.quantity' },
+                  revenue: { $sum: '$lines.total' },
+                  cost: { $sum: '$line_cost' },
+                },
+              },
+            ],
+          },
+        },
+      ])
+      .exec();
+
+    const raw = result?.totals?.[0];
+    const revenue = round2(raw?.revenue ?? 0);
+    const cost = round2(raw?.cost ?? 0);
+    const profit = round2(revenue - cost);
+    const totals: ProfitTotals = {
+      orders: raw?.orderIds?.length ?? 0,
+      units: raw?.units ?? 0,
+      revenue,
+      cost,
+      profit,
+      margin: revenue ? round2((profit / revenue) * 100) : 0,
+      uncosted_units: raw?.uncosted_units ?? 0,
+    };
+
+    const earners: ProfitEarner[] = (result?.products ?? []).map((r) => {
+      const rev = round2(r.revenue);
+      const c = round2(r.cost);
+      const p = round2(rev - c);
+      return {
+        product_id: r._id?.toString() ?? '',
+        name: r.name,
+        sku: r.sku,
+        quantity: r.quantity,
+        revenue: rev,
+        cost: c,
+        profit: p,
+        margin: rev ? round2((p / rev) * 100) : 0,
+      };
+    });
+
+    return {
+      totals,
+      series: fillBuckets(result?.series ?? [], from, to, tz, bucket),
+      top: [...earners].sort((a, b) => b.profit - a.profit).slice(0, 5),
+      // sold at or below what it cost: either a pricing mistake or a clearance
+      losing: earners.filter((e) => e.profit <= 0).sort((a, b) => a.profit - b.profit).slice(0, 5),
+    };
+  }
+
   private saleMatch(
     query: SalesReportDto | BaseReportDto,
     opts: { excludeRefunded?: boolean; skipSearch?: boolean } = {},
@@ -1371,6 +1618,129 @@ function dayBounds(
   const from = new Date(guess - offset);
   const to = new Date(from.getTime() + 24 * 60 * 60 * 1000 - 1);
   return { from, to, label };
+}
+
+/** Percent change from `was` to `now`; null when there is nothing to compare. */
+function percentChange(was: number, now: number): number | null {
+  if (!was) return null;
+  return round2(((now - was) / Math.abs(was)) * 100);
+}
+
+/** The calendar day in `tz` that an instant falls in, as y/m/d numbers. */
+function localParts(at: Date, tz: string): { y: number; m: number; d: number } {
+  const label = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at);
+  const [y, m, d] = label.split('-').map(Number);
+  return { y, m, d };
+}
+
+/** Midnight at the start of a local calendar day, as a UTC instant. */
+function localMidnight(y: number, m: number, d: number, tz: string): Date {
+  const guess = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  return new Date(guess - zoneOffsetMs(new Date(guess), tz));
+}
+
+/**
+ * Named periods are calendar periods: "this month" starts on the 1st, not 30
+ * days ago. A shopkeeper closing the month means the month.
+ */
+function profitBounds(
+  query: ProfitReportDto,
+  tz: string,
+): { key: string; label: string; from: Date; to: Date; bucket: 'hour' | 'day' } {
+  const now = new Date();
+  const { y, m, d } = localParts(now, tz);
+  const endOfToday = new Date(localMidnight(y, m, d, tz).getTime() + 24 * 60 * 60 * 1000 - 1);
+
+  if (query.period === ProfitPeriod.CUSTOM && (query.date_from || query.date_to)) {
+    const from = query.date_from ? new Date(query.date_from) : localMidnight(y, m, d, tz);
+    const to = query.date_to ? new Date(query.date_to) : endOfToday;
+    const oneDay = to.getTime() - from.getTime() <= 36 * 60 * 60 * 1000;
+    return {
+      key: 'custom',
+      label: `${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`,
+      from,
+      to,
+      bucket: oneDay ? 'hour' : 'day',
+    };
+  }
+
+  if (query.period === ProfitPeriod.WEEK) {
+    // the week runs Monday to today
+    const weekday = new Date(
+      new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(now),
+    ).getDay();
+    const back = (weekday + 6) % 7;
+    const start = new Date(localMidnight(y, m, d, tz).getTime() - back * 24 * 60 * 60 * 1000);
+    return { key: 'week', label: 'This week', from: start, to: endOfToday, bucket: 'day' };
+  }
+
+  if (query.period === ProfitPeriod.MONTH) {
+    return {
+      key: 'month',
+      label: 'This month',
+      from: localMidnight(y, m, 1, tz),
+      to: endOfToday,
+      bucket: 'day',
+    };
+  }
+
+  return {
+    key: 'today',
+    label: 'Today',
+    from: localMidnight(y, m, d, tz),
+    to: endOfToday,
+    bucket: 'hour',
+  };
+}
+
+/**
+ * Every hour or day in the window, zero-filled, so the chart has a flat run
+ * where nothing sold instead of a gap.
+ */
+function fillBuckets(
+  rows: { _id: string; revenue: number; cost: number }[],
+  from: Date,
+  to: Date,
+  tz: string,
+  bucket: 'hour' | 'day',
+): ProfitPoint[] {
+  const found = new Map(rows.map((r) => [r._id, r]));
+  const out: ProfitPoint[] = [];
+  const step = bucket === 'hour' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const keyOf = (at: Date) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      hour12: false,
+    }).formatToParts(at);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+    const day = `${get('year')}-${get('month')}-${get('day')}`;
+    return bucket === 'hour' ? `${day} ${String(Number(get('hour')) % 24).padStart(2, '0')}` : day;
+  };
+
+  for (let at = from.getTime(); at <= to.getTime(); at += step) {
+    const key = keyOf(new Date(at));
+    if (out.length && out[out.length - 1].key === key) continue;
+    const hit = found.get(key);
+    const revenue = round2(hit?.revenue ?? 0);
+    const cost = round2(hit?.cost ?? 0);
+    out.push({
+      key,
+      label: bucket === 'hour' ? `${key.slice(-2)}:00` : key.slice(5),
+      revenue,
+      cost,
+      profit: round2(revenue - cost),
+    });
+  }
+  return out;
 }
 
 /** How far `tz` runs ahead of UTC at that instant, in milliseconds. */

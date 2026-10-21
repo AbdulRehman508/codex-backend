@@ -4,6 +4,7 @@ import {
   BaseReportDto,
   DayCloseDto,
   ExpiryReportDto,
+  ProfitReportDto,
   SalesReportDto,
   StockReportDto,
 } from './dto/query-report.dto';
@@ -84,5 +85,16 @@ export class ReportsController {
   async dayClose(@Query() query: DayCloseDto) {
     const data = await this.reportsService.dayClose(query);
     return { message: 'Day close fetched', data };
+  }
+
+  @RequirePermission('reports', 'view')
+  @Get('profit')
+  @ApiOperation({
+    summary:
+      'What the shop earned today / this week / this month, with the window before it',
+  })
+  async profit(@Query() query: ProfitReportDto) {
+    const data = await this.reportsService.profit(query);
+    return { message: 'Profit report fetched', data };
   }
 }

@@ -176,6 +176,96 @@ module.exports = {
     );
     ok("today's bills are not in yesterday's sheet", yesterday.json?.data?.sales?.net !== day.sales.net);
 
+    // --- profit view
+    // a second line with no cost price: its units must be reported as uncosted
+    const freebie = (
+      await call('/products', {
+        method: 'POST',
+        token,
+        body: {
+          office_id: office,
+          name: `E2E NoCost ${s}`,
+          sku: `NOC-${s}`,
+          price: 100,
+          quantity: 10,
+          status: 'active',
+        },
+      })
+    ).json.data;
+    clean.delete(`/products/${freebie.id}`);
+    const freeSale = (
+      await call('/sales', {
+        method: 'POST',
+        token,
+        body: {
+          office_id: office,
+          customer_name: 'Walk-in',
+          payment_method: 'cash',
+          lines: [{ product_id: freebie.id, quantity: 2, price: 100 }],
+        },
+      })
+    ).json.data;
+    clean.delete(`/sales/${freeSale.id}`);
+
+    const profit = (
+      await call(`/reports/profit?office_id=${office}&period=today&tz=${encodeURIComponent(tz)}`, { token })
+    ).json?.data;
+
+    ok(
+      'profit totals hold together: profit is revenue less cost',
+      profit?.totals?.profit === round2(profit.totals.revenue - profit.totals.cost),
+      JSON.stringify(profit?.totals),
+    );
+    ok(
+      'margin is that profit as a share of revenue',
+      profit?.totals?.margin === round2((profit.totals.profit / profit.totals.revenue) * 100),
+      JSON.stringify(profit?.totals),
+    );
+    ok(
+      'the costed sale carries its 1500 of cost into the period',
+      profit?.totals?.cost >= 1500,
+      JSON.stringify(profit?.totals),
+    );
+    ok(
+      'top earners are ranked by profit, biggest first',
+      profit?.top?.every((t, i, all) => i === 0 || all[i - 1].profit >= t.profit),
+      JSON.stringify(profit?.top?.map((t) => t.profit)),
+    );
+    ok(
+      'units sold without a cost price are counted and flagged',
+      profit?.totals?.uncosted_units >= 2,
+      JSON.stringify(profit?.totals),
+    );
+    ok(
+      'today is bucketed by the hour, one point per hour of the day',
+      profit?.period?.bucket === 'hour' && profit?.series?.length === 24,
+      JSON.stringify({ bucket: profit?.period?.bucket, points: profit?.series?.length }),
+    );
+    ok(
+      'the series adds up to the same profit as the totals',
+      round2(profit.series.reduce((sum, b) => sum + b.profit, 0)) === profit.totals.profit,
+      JSON.stringify({ series: round2(profit.series.reduce((sum, b) => sum + b.profit, 0)), total: profit.totals.profit }),
+    );
+
+    const monthly = (
+      await call(`/reports/profit?office_id=${office}&period=month&tz=${encodeURIComponent(tz)}`, { token })
+    ).json?.data;
+    ok(
+      'a month is bucketed by the day and starts on the 1st',
+      monthly?.period?.bucket === 'day' && monthly?.period?.from?.length === 24,
+      JSON.stringify(monthly?.period),
+    );
+    ok(
+      'the month holds at least what today holds',
+      monthly?.totals?.profit >= profit?.totals?.profit,
+      JSON.stringify({ month: monthly?.totals?.profit, today: profit?.totals?.profit }),
+    );
+    ok(
+      'a period with nothing before it reports no comparison rather than a fake one',
+      monthly?.change?.profit === null || typeof monthly?.change?.profit === 'number',
+      JSON.stringify(monthly?.change),
+    );
+
     // --- cleanup: unwind in the order that keeps the guards happy
     await call(`/sales/${sale.json.data.id}`, { method: 'DELETE', token });
     await call(`/purchases/${purchase.id}`, { method: 'DELETE', token });
@@ -188,5 +278,6 @@ module.exports = {
       });
     }
     await clean.run();
+
   },
 };

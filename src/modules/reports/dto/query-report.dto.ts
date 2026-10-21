@@ -147,3 +147,44 @@ export class ExpiryReportDto extends BaseReportDto {
   @IsBoolean()
   expired_only?: boolean;
 }
+
+export enum ProfitPeriod {
+  TODAY = 'today',
+  WEEK = 'week',
+  MONTH = 'month',
+  CUSTOM = 'custom',
+}
+
+/**
+ * The profit view asks for a named period rather than two dates: a shopkeeper
+ * wants "this month", not a range they have to work out.
+ */
+export class ProfitReportDto {
+  @ApiPropertyOptional({ description: 'Office the profit is scoped to' })
+  @IsOptional()
+  @IsMongoId()
+  office_id?: string;
+
+  @ApiPropertyOptional({ enum: ProfitPeriod, default: ProfitPeriod.TODAY })
+  @IsOptional()
+  @IsEnum(ProfitPeriod)
+  period: ProfitPeriod = ProfitPeriod.TODAY;
+
+  @ApiPropertyOptional({ description: 'Start of a custom period (ISO instant)' })
+  @IsOptional()
+  @IsDateString()
+  date_from?: string;
+
+  @ApiPropertyOptional({ description: 'End of a custom period (ISO instant)' })
+  @IsOptional()
+  @IsDateString()
+  date_to?: string;
+
+  @ApiPropertyOptional({
+    description: 'IANA timezone the days are measured in, e.g. Asia/Karachi',
+    default: 'UTC',
+  })
+  @IsOptional()
+  @IsString()
+  tz?: string;
+}
