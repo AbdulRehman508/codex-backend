@@ -2,10 +2,12 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
-  NestInterceptor,
 } from '@nestjs/common';
+import type { NestInterceptor } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { RAW_RESPONSE_KEY } from '../decorators/raw-response.decorator';
 
 interface Envelope<T> {
   success: true;
@@ -16,16 +18,27 @@ interface Envelope<T> {
 /**
  * Wraps every successful controller return into { success, message, data }.
  * Controllers return { message?, data } — message defaults if absent.
+ *
+ * A route marked `@RawResponse()` is passed through untouched: a server-sent
+ * event stream carries its own shape and must not be wrapped per tick.
  */
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<
   any,
-  Envelope<T>
+  Envelope<T> | unknown
 > {
+  constructor(private readonly reflector: Reflector) {}
+
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler,
-  ): Observable<Envelope<T>> {
+  ): Observable<Envelope<T> | unknown> {
+    const raw = this.reflector.getAllAndOverride<boolean>(RAW_RESPONSE_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (raw) return next.handle();
+
     return next.handle().pipe(
       map((payload: unknown) => {
         if (
