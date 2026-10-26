@@ -8,11 +8,17 @@ import {
   StockAdjustmentSchema,
 } from './schemas/stock-adjustment.schema';
 import {
+  StockRequest,
+  StockRequestSchema,
+} from './schemas/stock-request.schema';
+import {
   StockTransfer,
   StockTransferSchema,
 } from './schemas/stock-transfer.schema';
 import { StockController } from './stock.controller';
 import { StockService } from './stock.service';
+import { RequestsController } from './requests.controller';
+import { RequestsService } from './requests.service';
 import { TransfersController } from './transfers.controller';
 import { TransfersService } from './transfers.service';
 
@@ -21,6 +27,7 @@ import { TransfersService } from './transfers.service';
     MongooseModule.forFeature([
       { name: StockAdjustment.name, schema: StockAdjustmentSchema },
       { name: StockTransfer.name, schema: StockTransferSchema },
+      { name: StockRequest.name, schema: StockRequestSchema },
       // the product is what actually moves; office is the FK existence check
       { name: Product.name, schema: ProductSchema },
       { name: Office.name, schema: OfficeSchema },
@@ -30,8 +37,8 @@ import { TransfersService } from './transfers.service';
   ],
   // the transfer routes are registered first: /stock/transfers must not be
   // swallowed by the adjustments' /stock/adjustments/:id style matching
-  controllers: [TransfersController, StockController],
-  providers: [StockService, TransfersService],
-  exports: [StockService, TransfersService],
+  controllers: [RequestsController, TransfersController, StockController],
+  providers: [StockService, TransfersService, RequestsService],
+  exports: [StockService, TransfersService, RequestsService],
 })
 export class StockModule {}

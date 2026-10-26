@@ -17,7 +17,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequirePermission } from '../../common/permissions/permissions.decorator';
+import {
+  AdminOnly,
+  RequirePermission,
+} from '../../common/permissions/permissions.decorator';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { QueryTransferDto } from './dto/query-transfer.dto';
 import { TransfersService } from './transfers.service';
@@ -48,11 +51,16 @@ export class TransfersController {
     return { message: 'Stock transfer fetched', data: doc.toJSON() };
   }
 
-  @RequirePermission('stock', 'create')
+  /**
+   * Branch-to-branch stock now moves through a request the holding branch
+   * approves, so this direct route is admin-only — a head office correcting
+   * stock, not a branch helping itself to another's shelves.
+   */
+  @AdminOnly()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
-    summary: 'Send stock to another branch (the receiver gets the product too)',
+    summary: 'Send stock straight to another branch (admin only)',
   })
   @ApiResponse({ status: 400, description: 'Not enough stock at the sending branch' })
   async create(
