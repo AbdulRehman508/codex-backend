@@ -18,6 +18,10 @@ import {
 } from '../../modules/products/schemas/product.schema';
 import { Staff, StaffDocument } from '../../modules/staff/schemas/staff.schema';
 import {
+  Expense,
+  ExpenseDocument,
+} from '../../modules/expenses/schemas/expense.schema';
+import {
   Supplier,
   SupplierDocument,
 } from '../../modules/suppliers/schemas/supplier.schema';
@@ -35,6 +39,7 @@ export const TRASH_MODULES = [
   'staff',
   'office',
   'location',
+  'expenses',
 ] as const;
 
 export type TrashModule = (typeof TRASH_MODULES)[number];
@@ -88,6 +93,7 @@ export class TrashService {
     @InjectModel(Staff.name) staffModel: Model<StaffDocument>,
     @InjectModel(Office.name) officeModel: Model<OfficeDocument>,
     @InjectModel(Rack.name) rackModel: Model<RackDocument>,
+    @InjectModel(Expense.name) expenseModel: Model<ExpenseDocument>,
   ) {
     this.specs = [
       {
@@ -164,6 +170,17 @@ export class TrashService {
         model: rackModel,
         searchFields: ['name', 'code'],
         row: (d) => ({ label: d.name, sub_label: d.code ?? '' }),
+        officeScoped: true,
+      },
+      {
+        key: 'expenses',
+        label: 'Expense',
+        model: expenseModel,
+        searchFields: ['expense_no', 'category', 'paid_to', 'note'],
+        row: (d) => ({
+          label: `${d.category} — ${d.amount}`,
+          sub_label: d.expense_no ?? '',
+        }),
         officeScoped: true,
       },
     ];

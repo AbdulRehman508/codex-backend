@@ -68,6 +68,14 @@ export class ReportsController {
   }
 
   @RequirePermission('reports', 'view')
+  @Get('expenses')
+  @ApiOperation({ summary: 'What the shop spent in the period, as a sheet' })
+  async expenses(@Query() query: BaseReportDto) {
+    const data = await this.reportsService.expenses(query);
+    return { message: 'Expense report fetched', data };
+  }
+
+  @RequirePermission('reports', 'view')
   @Get('expiry')
   @ApiOperation({
     summary: 'Batches running out of date, soonest first',

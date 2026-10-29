@@ -715,7 +715,7 @@ export class SalesService {
           .findOneAndUpdate(
             { _id: productId, deleted_at: null, quantity: { $gte: wanted } },
             { $inc: { quantity: delta } },
-            { new: true },
+            { returnDocument: 'after' },
           )
           .select('name quantity')
           .exec();

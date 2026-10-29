@@ -227,7 +227,7 @@ export class CustomersService {
       .findOneAndUpdate(
         { _id: id, deleted_at: null, borrow_amount: { $gte: amount } },
         { $inc: { borrow_amount: -amount } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 

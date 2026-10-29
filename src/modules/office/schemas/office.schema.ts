@@ -130,6 +130,13 @@ export class Office {
   @Prop({ trim: true, default: '' })
   tax_number!: string;
 
+  /**
+   * The cash the till starts the day with. Day close counts up from this, so
+   * without it the expected figure is always short by the float.
+   */
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  cash_float!: number;
+
   @Prop({ type: Date, default: null })
   deleted_at?: Date | null;
 }

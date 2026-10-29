@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { CountersService } from '../../common/counters/counters.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Office, OfficeDocument } from '../office/schemas/office.schema';
 import {
   Product,
@@ -77,6 +78,7 @@ export class RequestsService {
     private readonly counters: CountersService,
     private readonly transfers: TransfersService,
     private readonly realtime: RealtimeService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ---------- the picker ----------
@@ -204,7 +206,7 @@ export class RequestsService {
       requested_by: this.toObjectIdOrNull(userId),
     });
 
-    this.announce(doc, 'stock-request.created');
+    await this.announce(doc, 'stock-request.created', {}, userId);
     return doc;
   }
 
@@ -326,9 +328,12 @@ export class RequestsService {
     doc.decline_reason = '';
     await doc.save();
 
-    this.announce(doc, 'stock-request.approved', {
-      transfer_no: transfer.transfer_no,
-    });
+    await this.announce(
+      doc,
+      'stock-request.approved',
+      { transfer_no: transfer.transfer_no },
+      userId,
+    );
     return doc;
   }
 
@@ -349,7 +354,12 @@ export class RequestsService {
     doc.reviewed_at = new Date();
     await doc.save();
 
-    this.announce(doc, 'stock-request.declined', { reason: doc.decline_reason });
+    await this.announce(
+      doc,
+      'stock-request.declined',
+      { reason: doc.decline_reason },
+      userId,
+    );
     return doc;
   }
 
@@ -370,17 +380,23 @@ export class RequestsService {
     doc.reviewed_at = new Date();
     await doc.save();
 
-    this.announce(doc, 'stock-request.cancelled');
+    await this.announce(doc, 'stock-request.cancelled', {}, userId);
     return doc;
   }
 
   // ---------- helpers ----------
 
-  /** Both branches hear about every answer, so neither has to refresh. */
-  private announce(
+  /**
+   * Both branches hear about every answer, so neither has to refresh — and
+   * the branch that has to do something about it also gets a notification it
+   * can come back to, because the live nudge only reaches a screen that is
+   * open at that moment.
+   */
+  private async announce(
     doc: StockRequestDocument,
     type: string,
     extra: Record<string, unknown> = {},
+    userId?: string,
   ) {
     this.realtime.publish(
       [doc.requesting_office_id.toString(), doc.source_office_id.toString()],
@@ -398,6 +414,83 @@ export class RequestsService {
         },
       },
     );
+
+    await this.notify(doc, type, extra, userId);
+  }
+
+  /**
+   * Who needs to know, and what it says.
+   *
+   * A request goes to the branch that has to answer it; an answer goes back
+   * to the branch that asked. Nobody is told about their own action — the
+   * screen that did it already knows.
+   *
+   * A failure here must not fail the request: the stock has already moved and
+   * the live event has already gone out, so a bell that missed one line is
+   * the smaller loss.
+   */
+  private async notify(
+    doc: StockRequestDocument,
+    type: string,
+    extra: Record<string, unknown>,
+    userId?: string,
+  ) {
+    const asked = doc.requesting_office_id.toString();
+    const holds = doc.source_office_id.toString();
+
+    const plan: Record<
+      string,
+      { to: string; key: string; side: 'incoming' | 'outgoing'; office: string } | undefined
+    > = {
+      'stock-request.created': {
+        to: holds,
+        key: 'notif.requestCreated',
+        side: 'incoming',
+        office: doc.requesting_office_name,
+      },
+      'stock-request.approved': {
+        to: asked,
+        key: 'notif.requestApproved',
+        side: 'outgoing',
+        office: doc.source_office_name,
+      },
+      'stock-request.declined': {
+        to: asked,
+        key: 'notif.requestDeclined',
+        side: 'outgoing',
+        office: doc.source_office_name,
+      },
+      'stock-request.cancelled': {
+        to: holds,
+        key: 'notif.requestCancelled',
+        side: 'incoming',
+        office: doc.requesting_office_name,
+      },
+    };
+
+    const step = plan[type];
+    if (!step) return;
+
+    try {
+      await this.notifications.push({
+        officeIds: [step.to],
+        type,
+        title_key: step.key,
+        params: {
+          request_no: doc.request_no,
+          office: step.office,
+          units: String(doc.units),
+          items: String(doc.items_count),
+          reason: String(extra['reason'] ?? doc.decline_reason ?? ''),
+        },
+        link: '/stock/requests',
+        link_params: { id: doc._id.toString(), side: step.side },
+        refId: doc._id,
+        userId: userId ?? null,
+      });
+    } catch {
+      // the request itself stands; the bell simply missed this one
+    }
   }
 
   private assertReviewer(doc: StockRequestDocument, actingOfficeId?: string) {

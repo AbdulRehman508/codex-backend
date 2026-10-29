@@ -17,6 +17,8 @@ import { buildValidationPipe } from './common/pipes/validation.pipe';
 import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { DataBaseModule } from './database/database.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AccessModule } from './modules/access/access.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -39,6 +41,8 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
     // a branch-addressed event stream, so a screen hears an answer without
     // the user reaching for refresh
     RealtimeModule,
+    NotificationsModule,
+    ExpensesModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],

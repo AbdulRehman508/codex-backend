@@ -15,7 +15,7 @@ export class CountersService {
     const doc = await this.counterModel.findByIdAndUpdate(
       name,
       { $inc: { seq: 1 } },
-      { new: true, upsert: true },
+      { returnDocument: 'after', upsert: true },
     );
     return doc!.seq;
   }

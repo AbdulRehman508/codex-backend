@@ -162,4 +162,11 @@ export class CreateOfficeDto {
   @IsString()
   @MaxLength(50)
   tax_number?: string;
+
+  @ApiPropertyOptional({ description: 'Cash the till starts the day with', minimum: 0 })
+  @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? 0 : Number(value)))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cash_float?: number;
 }

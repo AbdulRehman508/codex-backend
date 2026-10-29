@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import {
+  Expense,
+  ExpenseSchema,
+} from '../expenses/schemas/expense.schema';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
   Customer,
@@ -16,6 +20,7 @@ import { DashboardService } from './dashboard.service';
     // read-only aggregation over the other modules' collections
     MongooseModule.forFeature([
       { name: Sale.name, schema: SaleSchema },
+      { name: Expense.name, schema: ExpenseSchema },
       { name: Product.name, schema: ProductSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: Purchase.name, schema: PurchaseSchema },

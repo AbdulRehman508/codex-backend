@@ -5,6 +5,10 @@ import {
   CustomerSchema,
 } from '../../modules/customers/schemas/customer.schema';
 import { Rack, RackSchema } from '../../modules/locations/schemas/rack.schema';
+import {
+  Expense,
+  ExpenseSchema,
+} from '../../modules/expenses/schemas/expense.schema';
 import { Office, OfficeSchema } from '../../modules/office/schemas/office.schema';
 import {
   Product,
@@ -27,6 +31,7 @@ import { TrashService } from './trash.service';
       { name: Supplier.name, schema: SupplierSchema },
       { name: Staff.name, schema: StaffSchema },
       { name: Office.name, schema: OfficeSchema },
+      { name: Expense.name, schema: ExpenseSchema },
       { name: Rack.name, schema: RackSchema },
     ]),
   ],

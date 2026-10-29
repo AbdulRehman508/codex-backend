@@ -90,7 +90,7 @@ export class StockService {
       .findOneAndUpdate(
         { _id: product._id, deleted_at: null, quantity: before },
         { $set: { quantity: after } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
     if (!updated) {

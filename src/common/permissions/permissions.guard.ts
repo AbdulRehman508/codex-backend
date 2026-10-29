@@ -15,13 +15,12 @@ import {
   RoleAccessDocument,
 } from '../../modules/access/schemas/role-access.schema';
 import { Role, RoleDocument } from '../../modules/roles/schemas/role.schema';
+import { EffectiveRoleService } from './effective-role.service';
 import {
   ADMIN_ONLY_KEY,
   PERMISSION_KEY,
   RequiredPermission,
 } from './permissions.decorator';
-
-const ADMIN_ROLE = 'admin';
 
 /**
  * Enforces the same access matrix the UI draws, on the server. Hiding a button
@@ -38,6 +37,7 @@ export class PermissionsGuard implements CanActivate {
     private readonly roleModel: Model<RoleDocument>,
     @InjectModel(RoleAccess.name)
     private readonly accessModel: Model<RoleAccessDocument>,
+    private readonly roles: EffectiveRoleService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -63,14 +63,22 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Not allowed');
     }
 
-    const isAdmin = await this.isAdmin(user.role_id);
-    if (isAdmin) return true;
+    // which branch is this call about? that is whose rules apply
+    const officeId =
+      this.requestedOffice(req) ?? (await this.roles.lastOffice(user.sub));
+    const effective = await this.roles.forOffice(user.role_id, officeId);
+
+    if (effective.is_admin) return true;
 
     if (adminOnly) {
       throw new ForbiddenException('Admins only');
     }
 
-    const granted = await this.hasPermission(user.role_id, required!);
+    if (effective.role_id === null) {
+      throw new ForbiddenException('Your role cannot be resolved');
+    }
+
+    const granted = await this.hasPermission(effective.role_id, required!);
     if (!granted) {
       throw new ForbiddenException(
         `Your role cannot ${required!.action} ${required!.module}`,
@@ -79,14 +87,22 @@ export class PermissionsGuard implements CanActivate {
     return true;
   }
 
-  private async isAdmin(roleId: number): Promise<boolean> {
-    if (roleId === undefined || roleId === null) return false;
-    const role = await this.roleModel
-      .findById(roleId)
-      .select('role')
-      .lean()
-      .exec();
-    return role?.role?.trim().toLowerCase() === ADMIN_ROLE;
+  /**
+   * The branch the call is about. A transfer names two; the sending branch is
+   * the one doing the thing being permitted, so it is the one checked.
+   */
+  private requestedOffice(
+    req: Request & { body?: Record<string, unknown> },
+  ): string | null {
+    for (const key of ['office_id', 'from_office_id', 'to_office_id']) {
+      const value =
+        (req.query as Record<string, unknown>)?.[key] ??
+        (req.params as Record<string, unknown>)?.[key] ??
+        req.body?.[key] ??
+        null;
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return null;
   }
 
   /** Fails closed: no stored matrix means no access. */

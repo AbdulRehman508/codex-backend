@@ -6,6 +6,7 @@ import {
 } from '../../modules/access/schemas/role-access.schema';
 import { Role, RoleSchema } from '../../modules/roles/schemas/role.schema';
 import { Staff, StaffSchema } from '../../modules/staff/schemas/staff.schema';
+import { EffectiveRoleService } from './effective-role.service';
 import { OfficeScopeGuard } from './office-scope.guard';
 import { PermissionsGuard } from './permissions.guard';
 
@@ -22,9 +23,14 @@ import { PermissionsGuard } from './permissions.guard';
       { name: Staff.name, schema: StaffSchema },
     ]),
   ],
-  providers: [PermissionsGuard, OfficeScopeGuard],
+  providers: [PermissionsGuard, OfficeScopeGuard, EffectiveRoleService],
   // MongooseModule is re-exported so the models resolve where the guards are
   // instantiated: APP_GUARD builds them in the AppModule injector, not here.
-  exports: [PermissionsGuard, OfficeScopeGuard, MongooseModule],
+  exports: [
+    PermissionsGuard,
+    OfficeScopeGuard,
+    EffectiveRoleService,
+    MongooseModule,
+  ],
 })
 export class PermissionsModule {}

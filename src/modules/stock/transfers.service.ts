@@ -117,7 +117,7 @@ export class TransfersService {
               quantity: { $gte: line.quantity },
             },
             { $inc: { quantity: -line.quantity } },
-            { new: true },
+            { returnDocument: 'after' },
           )
           .exec();
         if (!taken) {
@@ -239,7 +239,7 @@ export class TransfersService {
               quantity: { $gte: line.quantity },
             },
             { $inc: { quantity: -line.quantity } },
-            { new: true },
+            { returnDocument: 'after' },
           )
           .exec();
         if (!back) {
