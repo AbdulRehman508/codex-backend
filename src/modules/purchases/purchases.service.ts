@@ -504,7 +504,7 @@ export class PurchasesService {
           .findOneAndUpdate(
             { _id: productId, deleted_at: null, quantity: { $gte: wanted } },
             { $inc: { quantity: d } },
-            { new: true },
+            { returnDocument: 'after' },
           )
           .select('name quantity')
           .exec();

@@ -6,6 +6,10 @@ import {
   CustomerDocument,
 } from '../customers/schemas/customer.schema';
 import {
+  Expense,
+  ExpenseDocument,
+} from '../expenses/schemas/expense.schema';
+import {
   Product,
   ProductDocument,
   ProductStatus,
@@ -47,8 +51,12 @@ export interface DashboardOverview {
     orders: Compared;
     new_customers: Compared;
     refunds: Compared;
-    /** revenue less the cost of what was sold, over the same period */
+    /** revenue less the cost of what was sold — before the shop's own bills */
     profit: Compared;
+    /** rent, wages and the rest, over the same period */
+    expenses: Compared;
+    /** profit less those expenses: what the owner keeps */
+    net_profit: Compared;
     /** what customers owe right now — a balance, not a period figure */
     outstanding_borrow: number;
     /** value of the stock bought in from suppliers during the period */
@@ -91,6 +99,8 @@ export class DashboardService {
     private readonly saleModel: Model<SaleDocument>,
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Expense.name)
+    private readonly expenseModel: Model<ExpenseDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(Purchase.name)
@@ -168,6 +178,11 @@ export class DashboardService {
         new_customers: { value: newCustomers, previous: prevCustomers },
         refunds: { value: current.refunds, previous: previous.refunds },
         profit: { value: current.profit, previous: previous.profit },
+        expenses: { value: current.expenses, previous: previous.expenses },
+        net_profit: {
+          value: round2(current.profit - current.expenses),
+          previous: round2(previous.profit - previous.expenses),
+        },
         outstanding_borrow: outstanding,
         purchases: { value: purchases, previous: prevPurchases },
         outstanding_payable: payable,
@@ -187,7 +202,13 @@ export class DashboardService {
     scope: Record<string, any>,
     from: Date,
     to: Date,
-  ): Promise<{ revenue: number; orders: number; refunds: number; profit: number }> {
+  ): Promise<{
+    revenue: number;
+    orders: number;
+    refunds: number;
+    profit: number;
+    expenses: number;
+  }> {
     const [row] = await this.saleModel
       .aggregate<{
         revenue: number;
@@ -278,12 +299,27 @@ export class DashboardService {
         },
       ])
       .exec();
+    // what the shop spent in the same window, dated by when it went out
+    const [spent] = await this.expenseModel
+      .aggregate<{ total: number }>([
+        {
+          $match: {
+            deleted_at: null,
+            ...(scope.office_id ? { office_id: scope.office_id } : {}),
+            spent_at: { $gte: from, $lt: to },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ])
+      .exec();
+
     const revenue = round2(row?.revenue ?? 0);
     return {
       revenue,
       orders: row?.orders ?? 0,
       refunds: round2(row?.refunds ?? 0),
       profit: round2(revenue - round2(row?.cost ?? 0)),
+      expenses: round2(spent?.total ?? 0),
     };
   }
 

@@ -9,6 +9,12 @@ import {
   Customer,
   CustomerDocument,
 } from '../customers/schemas/customer.schema';
+import {
+  Expense,
+  ExpenseDocument,
+  ExpensePaymentMethod,
+} from '../expenses/schemas/expense.schema';
+import { Office, OfficeDocument } from '../office/schemas/office.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import {
   ProductLot,
@@ -208,7 +214,12 @@ export interface ProfitTotals {
   units: number;
   revenue: number;
   cost: number;
+  /** revenue less the cost of goods — before the shop's own bills */
   profit: number;
+  /** rent, wages, electricity: what the shop spent to keep the doors open */
+  expenses: number;
+  /** what the owner actually keeps: profit less expenses */
+  net_profit: number;
   /** profit as a share of revenue, 0-100 */
   margin: number;
   /**
@@ -244,12 +255,36 @@ export interface ProfitReport {
   /** the window of the same length immediately before this one */
   previous: ProfitTotals;
   /** percent change against that window; null when it had nothing to compare */
-  change: { revenue: number | null; profit: number | null };
+  change: { revenue: number | null; profit: number | null; net_profit: number | null };
+  /** where the expenses went, biggest first */
+  expense_breakdown: { category: string; amount: number }[];
   series: ProfitPoint[];
   /** best earners inside the period */
   top: ProfitEarner[];
   /** lines that sold at or below cost — worth a look */
   losing: ProfitEarner[];
+}
+
+export interface ExpenseReportRow {
+  id: string;
+  expense_no: string;
+  spent_at: string | null;
+  category: string;
+  paid_to: string;
+  payment_method: string;
+  note: string;
+  amount: number;
+}
+
+export interface ExpenseReportSummary {
+  entries: number;
+  total: number;
+  /** the part that came out of the till */
+  cash: number;
+  online: number;
+  /** the heaviest category in the period, for the tile */
+  top_category: string;
+  top_category_amount: number;
 }
 
 export interface DayClose {
@@ -276,6 +311,14 @@ export interface DayClose {
     customer_repayments: number;
     repayment_count: number;
   };
+  expenses: {
+    entries: number;
+    total: number;
+    /** the part that came out of the till */
+    cash: number;
+    online: number;
+    by_category: { category: string; amount: number }[];
+  };
   purchases: {
     bills: number;
     total: number;
@@ -284,7 +327,13 @@ export interface DayClose {
     payment_count: number;
   };
   stock: { adjustments: number; transfers: number };
-  cash_drawer: { in: number; out: number; expected: number };
+  cash_drawer: {
+    /** the float the till started the day with */
+    opening: number;
+    in: number;
+    out: number;
+    expected: number;
+  };
 }
 
 export interface PayableSummary {
@@ -301,6 +350,10 @@ export class ReportsService {
     private readonly saleModel: Model<SaleDocument>,
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Expense.name)
+    private readonly expenseModel: Model<ExpenseDocument>,
+    @InjectModel(Office.name)
+    private readonly officeModel: Model<OfficeDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerPayment.name)
@@ -1007,6 +1060,105 @@ export class ReportsService {
 
   // ---------- helpers ----------
 
+  // ---------- 8. expenses ----------
+
+  /**
+   * What the shop spent in the period, as a sheet. The same rows the expense
+   * screen shows, in the shape every other report uses so the page can print
+   * and export it without a special case.
+   */
+  async expenses(
+    query: BaseReportDto,
+  ): Promise<ReportPage<ExpenseReportRow, ExpenseReportSummary>> {
+    const { page, limit } = query;
+    const filter: Record<string, any> = { deleted_at: null };
+    if (query.office_id) {
+      filter.office_id = new Types.ObjectId(query.office_id);
+    }
+    const range = this.dateRange(query.date_from, query.date_to);
+    if (range) filter.spent_at = range;
+    if (query.search?.trim()) {
+      const rx = new RegExp(escapeRegex(query.search.trim()), 'i');
+      filter.$or = [
+        { expense_no: rx },
+        { category: rx },
+        { paid_to: rx },
+        { note: rx },
+      ];
+    }
+
+    const sortable = ['spent_at', 'category', 'amount', 'expense_no'];
+    const sortField =
+      query.sort && sortable.includes(query.sort) ? query.sort : 'spent_at';
+    const dir = query.order === SortOrder.ASC ? 1 : -1;
+
+    const [docs, total, totals, byCategory] = await Promise.all([
+      this.expenseModel
+        .find(filter)
+        .sort({ [sortField]: dir })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.expenseModel.countDocuments(filter).exec(),
+      this.expenseModel
+        .aggregate<{ total: number; cash: number }>([
+          { $match: filter },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$amount' },
+              cash: {
+                $sum: {
+                  $cond: [
+                    { $eq: ['$payment_method', ExpensePaymentMethod.CASH] },
+                    '$amount',
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ])
+        .exec(),
+      this.expenseModel
+        .aggregate<{ _id: string; amount: number }>([
+          { $match: filter },
+          { $group: { _id: '$category', amount: { $sum: '$amount' } } },
+          { $sort: { amount: -1 } },
+          { $limit: 1 },
+        ])
+        .exec(),
+    ]);
+
+    const spent = round2(totals[0]?.total ?? 0);
+    const cash = round2(totals[0]?.cash ?? 0);
+
+    return {
+      data: docs.map((d) => ({
+        id: String(d._id),
+        expense_no: d.expense_no,
+        spent_at: d.spent_at ? new Date(d.spent_at).toISOString() : null,
+        category: d.category,
+        paid_to: d.paid_to ?? '',
+        payment_method: d.payment_method,
+        note: d.note ?? '',
+        amount: round2(d.amount),
+      })),
+      total,
+      page,
+      limit,
+      summary: {
+        entries: total,
+        total: spent,
+        cash,
+        online: round2(spent - cash),
+        top_category: byCategory[0]?._id ?? '—',
+        top_category_amount: round2(byCategory[0]?.amount ?? 0),
+      },
+    };
+  }
+
   // ---------- 7. profit ----------
 
   /**
@@ -1045,7 +1197,12 @@ export class ReportsService {
       change: {
         revenue: percentChange(before.totals.revenue, current.totals.revenue),
         profit: percentChange(before.totals.profit, current.totals.profit),
+        net_profit: percentChange(
+          before.totals.net_profit,
+          current.totals.net_profit,
+        ),
       },
+      expense_breakdown: current.expenseBreakdown,
       series: current.series,
       top: current.top,
       losing: current.losing,
@@ -1059,7 +1216,13 @@ export class ReportsService {
     to: Date,
     tz: string,
     bucket: 'hour' | 'day',
-  ): Promise<{ totals: ProfitTotals; series: ProfitPoint[]; top: ProfitEarner[]; losing: ProfitEarner[] }> {
+  ): Promise<{
+    totals: ProfitTotals;
+    series: ProfitPoint[];
+    top: ProfitEarner[];
+    losing: ProfitEarner[];
+    expenseBreakdown: { category: string; amount: number }[];
+  }> {
     const match: Record<string, any> = {
       deleted_at: null,
       status: { $ne: SaleStatus.REFUNDED },
@@ -1068,6 +1231,20 @@ export class ReportsService {
     if (officeId) match.office_id = new Types.ObjectId(officeId);
 
     const format = bucket === 'hour' ? '%Y-%m-%d %H' : '%Y-%m-%d';
+
+    const spent = await this.expenseModel
+      .aggregate<{ _id: string; amount: number }>([
+        {
+          $match: {
+            deleted_at: null,
+            ...(officeId ? { office_id: new Types.ObjectId(officeId) } : {}),
+            spent_at: { $gte: from, $lte: to },
+          },
+        },
+        { $group: { _id: '$category', amount: { $sum: '$amount' } } },
+        { $sort: { amount: -1 } },
+      ])
+      .exec();
 
     const [result] = await this.saleModel
       .aggregate<{
@@ -1157,12 +1334,16 @@ export class ReportsService {
     const revenue = round2(raw?.revenue ?? 0);
     const cost = round2(raw?.cost ?? 0);
     const profit = round2(revenue - cost);
+    const expenses = round2(spent.reduce((sum, c) => sum + c.amount, 0));
     const totals: ProfitTotals = {
       orders: raw?.orderIds?.length ?? 0,
       units: raw?.units ?? 0,
       revenue,
       cost,
       profit,
+      expenses,
+      net_profit: round2(profit - expenses),
+      // margin stays on the gross figure: it measures the trade, not the rent
       margin: revenue ? round2((profit / revenue) * 100) : 0,
       uncosted_units: raw?.uncosted_units ?? 0,
     };
@@ -1189,6 +1370,10 @@ export class ReportsService {
       top: [...earners].sort((a, b) => b.profit - a.profit).slice(0, 5),
       // sold at or below what it cost: either a pricing mistake or a clearance
       losing: earners.filter((e) => e.profit <= 0).sort((a, b) => a.profit - b.profit).slice(0, 5),
+      expenseBreakdown: spent.map((c) => ({
+        category: c._id,
+        amount: round2(c.amount),
+      })),
     };
   }
 
@@ -1375,7 +1560,7 @@ export class ReportsService {
     if (office) scope.office_id = office;
     const inDay = { created_at: { $gte: from, $lte: to } };
 
-    const [sales, payMix, received, supplierPaid, purchases, moves] =
+    const [sales, payMix, received, supplierPaid, purchases, moves, spent, branch] =
       await Promise.all([
         // bills written today, refunds kept apart from the takings
         this.saleModel
@@ -1523,6 +1708,39 @@ export class ReportsService {
               : {}),
           }),
         ]),
+        // what the shop spent today that was not stock. Expenses are dated by
+        // when the money went out, not when they were typed in.
+        this.expenseModel
+          .aggregate<{ _id: string; amount: number; entries: number; cash: number }>([
+            {
+              $match: {
+                deleted_at: null,
+                ...(office ? { office_id: office } : {}),
+                spent_at: { $gte: from, $lte: to },
+              },
+            },
+            {
+              $group: {
+                _id: '$category',
+                amount: { $sum: '$amount' },
+                entries: { $sum: 1 },
+                cash: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ['$payment_method', ExpensePaymentMethod.CASH] },
+                      '$amount',
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+            { $sort: { amount: -1 } },
+          ])
+          .exec(),
+        office
+          ? this.officeModel.findById(office).select('cash_float').lean().exec()
+          : Promise.resolve(null),
       ]);
 
     const s = sales[0];
@@ -1532,6 +1750,12 @@ export class ReportsService {
     const repaid = round2(received[0]?.amount ?? 0);
     const toSuppliers = round2(supplierPaid[0]?.amount ?? 0);
     const [adjustments, transfers] = moves;
+    const spentTotal = round2(spent.reduce((sum, c) => sum + c.amount, 0));
+    const spentCash = round2(spent.reduce((sum, c) => sum + c.cash, 0));
+    const spentEntries = spent.reduce((sum, c) => sum + c.entries, 0);
+    const opening = round2(branch?.cash_float ?? 0);
+    // only cash leaves the till: an online bill never touches the drawer
+    const cashOut = round2(toSuppliers + spentCash);
 
     return {
       date: label,
@@ -1564,13 +1788,25 @@ export class ReportsService {
         supplier_payments: toSuppliers,
         payment_count: supplierPaid[0]?.count ?? 0,
       },
+      expenses: {
+        entries: spentEntries,
+        total: spentTotal,
+        cash: spentCash,
+        online: round2(spentTotal - spentCash),
+        by_category: spent.map((c) => ({
+          category: c._id,
+          amount: round2(c.amount),
+        })),
+      },
       stock: { adjustments, transfers },
-      // the drawer: cash taken at the till plus cash debts settled, less what
-      // was handed to suppliers. Online takings never touch it.
+      // the drawer: the float it opened with, plus cash taken at the till and
+      // cash debts settled, less what was handed to suppliers and spent in
+      // cash. Online money never touches it either way.
       cash_drawer: {
+        opening,
         in: round2(collectedCash + repaid),
-        out: toSuppliers,
-        expected: round2(collectedCash + repaid - toSuppliers),
+        out: cashOut,
+        expected: round2(opening + collectedCash + repaid - cashOut),
       },
     };
   }

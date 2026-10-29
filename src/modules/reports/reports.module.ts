@@ -1,4 +1,9 @@
 import { Module } from '@nestjs/common';
+import {
+  Expense,
+  ExpenseSchema,
+} from '../expenses/schemas/expense.schema';
+import { Office, OfficeSchema } from '../office/schemas/office.schema';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
   CustomerPayment,
@@ -33,6 +38,8 @@ import { ReportsService } from './reports.service';
     // read-only aggregation across the other modules' collections
     MongooseModule.forFeature([
       { name: Sale.name, schema: SaleSchema },
+      { name: Expense.name, schema: ExpenseSchema },
+      { name: Office.name, schema: OfficeSchema },
       { name: Product.name, schema: ProductSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: CustomerPayment.name, schema: CustomerPaymentSchema },

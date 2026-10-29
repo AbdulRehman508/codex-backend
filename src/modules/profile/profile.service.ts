@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { EffectiveRoleService } from '../../common/permissions/effective-role.service';
 import { StorageService } from '../../common/storage/storage.service';
+import { ACCESS_MODULES } from '../access/access.constants';
+import {
+  RoleAccess,
+  RoleAccessDocument,
+} from '../access/schemas/role-access.schema';
 import { Office, OfficeDocument } from '../office/schemas/office.schema';
 import { Role, RoleDocument } from '../roles/schemas/role.schema';
 import { Staff, StaffDocument } from '../staff/schemas/staff.schema';
@@ -34,6 +40,24 @@ export interface ProfileResponse {
   updated_at?: string;
 }
 
+/** One module's rules, as a screen reads them. */
+export interface EffectivePermissionRow {
+  module: string;
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+/** What the caller may do, in the branch they are working in. */
+export interface EffectivePermissions {
+  office_id: string | null;
+  role_id: number | null;
+  role: string | null;
+  is_admin: boolean;
+  permissions: EffectivePermissionRow[];
+}
+
 /** Just enough of an office to fill a picker. */
 export interface OfficePick {
   id: string;
@@ -51,6 +75,9 @@ export class ProfileService {
     private readonly officeModel: Model<OfficeDocument>,
     @InjectModel(Role.name)
     private readonly roleModel: Model<RoleDocument>,
+    @InjectModel(RoleAccess.name)
+    private readonly accessModel: Model<RoleAccessDocument>,
+    private readonly roles: EffectiveRoleService,
     private readonly fileStorage: StorageService,
   ) {}
 
@@ -159,6 +186,72 @@ export class ProfileService {
     staff.last_office_id = new Types.ObjectId(officeId);
     await staff.save();
     return { last_office_id: officeId };
+  }
+
+  /**
+   * What the caller may do in one branch.
+   *
+   * The role is resolved for that branch, not taken off the user record: a
+   * manager in two branches follows each branch's own matrix. With no office
+   * named, the branch they last worked in answers — the same one the header
+   * re-selects on login.
+   */
+  async permissionsFor(
+    userId: string,
+    officeId?: string,
+  ): Promise<EffectivePermissions> {
+    const staff = await this.findLive(userId);
+    const assigned = staff.office_ids.map((o) => o.toString());
+
+    // a branch the user does not work in tells them nothing
+    let office = officeId && assigned.includes(officeId) ? officeId : null;
+    if (!office) {
+      const last = staff.last_office_id ? staff.last_office_id.toString() : null;
+      office = last && assigned.includes(last) ? last : (assigned[0] ?? null);
+    }
+
+    const effective = await this.roles.forOffice(staff.role_id, office);
+
+    // an admin is not held to a matrix; the UI reads the flag, not the rows
+    if (effective.is_admin) {
+      return {
+        office_id: office,
+        role_id: effective.role_id,
+        role: effective.role,
+        is_admin: true,
+        permissions: [],
+      };
+    }
+
+    const doc = effective.role_id
+      ? await this.accessModel
+          .findOne({ role_id: effective.role_id })
+          .select('permissions')
+          .lean()
+          .exec()
+      : null;
+
+    const stored = new Map(
+      (doc?.permissions ?? []).map((p) => [p.module, p]),
+    );
+
+    return {
+      office_id: office,
+      role_id: effective.role_id,
+      role: effective.role,
+      is_admin: false,
+      // every module is listed, so a screen never has to guess at a gap
+      permissions: ACCESS_MODULES.map((m) => {
+        const p = stored.get(m.key);
+        return {
+          module: m.key,
+          view: p?.view ?? false,
+          create: p?.create ?? false,
+          edit: p?.edit ?? false,
+          delete: p?.delete ?? false,
+        };
+      }),
+    };
   }
 
   // --- helpers ---

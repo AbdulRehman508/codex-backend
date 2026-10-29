@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Put, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UpdateLastOfficeDto } from './dto/update-last-office.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -25,6 +25,24 @@ export class ProfileController {
   async listOffices(@CurrentUser('sub') userId: string) {
     const data = await this.profileService.listOffices(userId);
     return { message: 'Offices fetched', data };
+  }
+
+  /**
+   * The caller's own rules, in one branch.
+   *
+   * This is deliberately not behind `access_control`: that key is for editing
+   * *other* roles' matrices. A manager has to be able to read their own, or
+   * the UI would have to fail closed and hide every screen from them.
+   */
+  @Get('permissions')
+  @ApiOperation({ summary: "The caller's permissions in one office" })
+  @ApiQuery({ name: 'office_id', required: false })
+  async permissions(
+    @CurrentUser('sub') userId: string,
+    @Query('office_id') officeId?: string,
+  ) {
+    const data = await this.profileService.permissionsFor(userId, officeId);
+    return { message: 'Permissions fetched', data };
   }
 
   @Put()

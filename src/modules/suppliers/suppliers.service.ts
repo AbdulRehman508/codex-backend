@@ -170,7 +170,7 @@ export class SuppliersService {
       .findOneAndUpdate(
         { _id: id, deleted_at: null, payable_amount: { $gte: amount } },
         { $inc: { payable_amount: -amount } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .exec();
 
